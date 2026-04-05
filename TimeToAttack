@@ -1,0 +1,158 @@
+javascript:(function () {
+
+    // ==============================
+    // CONFIG
+    // ==============================
+    const WARNING_TIME = 10000; // 10 Sekunden vorher
+
+    // ==============================
+    // UI ERSTELLEN
+    // ==============================
+    function createUI() {
+        if (document.getElementById("bbcodePlanner")) return;
+
+        const box = document.createElement("div");
+        box.id = "bbcodePlanner";
+        box.style = `
+            position:fixed;
+            bottom:20px;
+            right:20px;
+            width:320px;
+            background:#f4e4bc;
+            border:2px solid #603000;
+            padding:10px;
+            z-index:99999;
+            font-size:12px;
+        `;
+
+        box.innerHTML = `
+            <b>BBCode Timer Tool</b><br><br>
+
+            <textarea id="bbcodeInput" style="width:100%;height:100px;"></textarea><br><br>
+
+            <button id="startTimers" style="width:100%">Timer starten</button>
+
+            <div id="timerList" style="margin-top:10px;max-height:250px;overflow:auto;"></div>
+        `;
+
+        document.body.appendChild(box);
+    }
+
+    // ==============================
+    // BBCODE PARSER
+    // ==============================
+    function parseBBCode(bbcode) {
+        const regex = /\[\*\]\[unit\](.*?)\[\/unit\]\[\|\]\s*(\d+\|\d+).*?\[\|\](\d+\/\d+\/\d+\s+\d+:\d+:\d+).*?\[url=(.*?)\]/g;
+
+        let result = [];
+        let match;
+
+        while ((match = regex.exec(bbcode)) !== null) {
+            result.push({
+                unit: match[1],
+                coords: match[2],
+                launchTime: new Date(match[3].replace(/(\d+)\/(\d+)\/(\d+)/, "$3-$2-$1")),
+                url: match[4],
+                warned: false
+            });
+        }
+
+        return result;
+    }
+
+    // ==============================
+    // SOUND
+    // ==============================
+    function playSound() {
+        new Audio("https://www.soundjay.com/misc_c2026/sounds/hohner-melodica-1.mp3").play();
+    }
+
+    // ==============================
+    // TIMER ERSTELLEN
+    // ==============================
+    function createTimer(plan) {
+        const list = document.getElementById("timerList");
+
+        const row = document.createElement("div");
+        row.style = "margin-bottom:8px;padding:5px;border-bottom:1px solid #999;";
+
+        const label = document.createElement("div");
+        label.innerHTML = `<b>${plan.coords}</b> (${plan.unit})`;
+
+        const countdown = document.createElement("div");
+        countdown.textContent = "Lade...";
+
+        const btn = document.createElement("button");
+        btn.textContent = "Senden";
+        btn.disabled = true;
+        btn.style.width = "100%";
+
+        btn.onclick = () => {
+            window.open(plan.url, "_blank");
+        };
+
+        row.appendChild(label);
+        row.appendChild(countdown);
+        row.appendChild(btn);
+
+        list.appendChild(row);
+
+        const sendTime = plan.launchTime.getTime();
+
+        const interval = setInterval(() => {
+            const now = Date.now();
+            const diff = sendTime - now;
+
+            if (diff <= 0) {
+                countdown.innerHTML = "<span style='color:green;font-weight:bold;'>JETZT!</span>";
+                btn.disabled = false;
+                btn.style.background = "green";
+                clearInterval(interval);
+                return;
+            }
+
+            // 10 Sekunden vorher Sound
+            if (diff <= WARNING_TIME && !plan.warned) {
+                playSound();
+                plan.warned = true;
+            }
+
+            countdown.textContent = formatTime(diff);
+
+        }, 100);
+    }
+
+    // ==============================
+    // ZEIT FORMAT
+    // ==============================
+    function formatTime(ms) {
+        const total = Math.floor(ms / 1000);
+        const m = Math.floor(total / 60);
+        const s = total % 60;
+        return `${m}:${s.toString().padStart(2, '0')}`;
+    }
+
+    // ==============================
+    // START
+    // ==============================
+    function init() {
+        createUI();
+
+        document.getElementById("startTimers").onclick = () => {
+            const input = document.getElementById("bbcodeInput").value;
+            const plans = parseBBCode(input);
+
+            document.getElementById("timerList").innerHTML = "";
+
+            if (!plans.length) {
+                alert("Kein gültiger BBCode!");
+                return;
+            }
+
+            plans.forEach(p => createTimer(p));
+        };
+    }
+
+    init();
+
+})();
