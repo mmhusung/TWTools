@@ -1,6 +1,7 @@
 javascript:(function () {
 
-    const WARNING_TIME = 10000;
+    const titleText = "Time To Attack";
+    const LATE_TOLERANCE = 20000; // 20 Sekunden Zeitpuffer
 
     function createUI() {
         if (document.getElementById("bbcodePlanner")) return;
@@ -8,41 +9,35 @@ javascript:(function () {
         const box = document.createElement("div");
         box.id = "bbcodePlanner";
         box.style = `
-            position:fixed;
-            bottom:20px;
-            right:20px;
-            width:340px;
-            background:#f4e4bc;
-            border:2px solid #603000;
-            padding:10px;
-            z-index:99999;
-            font-size:12px;
+            position:fixed; bottom:20px; right:20px; width:300px;
+            background:#f4e4bc; border:2px solid #603000; padding:10px;
+            z-index:99999; font-size:12px; font-family: Verdana, Arial;
         `;
 
         box.innerHTML = `
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-                <b>BBCode Timer Tool</b>
-                <button id="closePlanner" style="background:red;color:white;border:none;">X</button>
+            <div id="plannerHeader" style="display:flex; justify-content:flex-end; align-items:center; margin-bottom:5px;">
+                <b id="toolTitle" style="margin-right: auto;">${titleText}</b>
+                <button id="closePlanner" style="background:red; color:white; border:none; cursor:pointer; padding:2px 5px; font-weight:bold;">X</button>
             </div>
-            <br>
 
-            <textarea id="bbcodeInput" style="width:100%;height:100px;"></textarea><br><br>
+            <div id="setupContainer">
+                <textarea id="bbcodeInput" style="width:100%;height:80px;box-sizing:border-box;" placeholder="BBCode hier rein..."></textarea>
+                <div style="margin: 8px 0; display:flex; justify-content:space-between; align-items:center;">
+                    <span>Warnung (Sekunden):</span>
+                    <input type="number" id="warningSeconds" value="10" style="width:50px; border:1px solid #603000;">
+                </div>
+                <button id="startTimers" style="width:100%; padding:5px; cursor:pointer; background:#21881e; color:white; border:none; font-weight:bold;">Timer starten</button>
+            </div>
 
-            <button id="startTimers" style="width:100%">Timer starten</button>
-
-            <div id="timerList" style="margin-top:10px;max-height:250px;overflow:auto;"></div>
+            <div id="timerList" style="max-height:250px;overflow:auto;"></div>
         `;
 
         document.body.appendChild(box);
-
-        document.getElementById("closePlanner").onclick = () => {
-            box.remove();
-        };
+        document.getElementById("closePlanner").onclick = () => box.remove();
     }
 
     function parseBBCode(bbcode) {
         const regex = /\[\*\]\[unit\](.*?)\[\/unit\]\[\|\]\s*(\d+\|\d+).*?\[\|\](\d+\/\d+\/\d+\s+\d+:\d+:\d+).*?\[url=(.*?)\]/g;
-
         let result = [];
         let match;
 
@@ -52,10 +47,10 @@ javascript:(function () {
                 coords: match[2],
                 launchTime: new Date(match[3].replace(/(\d+)\/(\d+)\/(\d+)/, "$3-$2-$1")),
                 url: match[4],
-                warned: false
+                warned: false,
+                clicked: false
             });
         }
-
         return result;
     }
 
@@ -67,65 +62,71 @@ javascript:(function () {
         return `/graphic/unit/unit_${unit}.webp`;
     }
 
-    function createTimer(plan) {
+    function createTimer(plan, warningTimeMs) {
         const list = document.getElementById("timerList");
-
         const row = document.createElement("div");
-        row.style = "margin-bottom:8px;padding:5px;border-bottom:1px solid #999;";
+        row.style = "margin-bottom:5px;padding:5px;border-bottom:1px solid #603000; display:flex; justify-content:space-between; align-items:center;";
 
-        const label = document.createElement("div");
-        label.innerHTML = `
-            <img src="${getUnitIcon(plan.unit)}" style="vertical-align:middle;margin-right:5px;">
-            <b>${plan.coords}</b> (${plan.unit})
+        row.innerHTML = `
+            <span><img src="${getUnitIcon(plan.unit)}" style="vertical-align:middle;width:16px;margin-right:5px;"><b>${plan.coords}</b></span>
+            <span id="display_${plan.coords.replace('|','_')}" style="font-weight:bold; font-family:monospace; flex-grow:1; text-align:center;">Lade...</span>
+            <button id="btn_${plan.coords.replace('|','_')}" style="cursor:pointer; min-width:70px;" disabled>Senden</button>
         `;
-
-        const countdown = document.createElement("div");
-        countdown.textContent = "Lade...";
-
-        const btn = document.createElement("button");
-        btn.textContent = "Senden";
-        btn.disabled = true;
-        btn.style.width = "100%";
-
-        btn.onclick = () => {
-            window.open(plan.url, "_blank");
-        };
-
-        row.appendChild(label);
-        row.appendChild(countdown);
-        row.appendChild(btn);
 
         list.appendChild(row);
 
-        const sendTime = plan.launchTime.getTime();
+        const display = row.querySelector(`#display_${plan.coords.replace('|','_')}`);
+        const btn = row.querySelector(`#btn_${plan.coords.replace('|','_')}`);
+
+        btn.onclick = () => {
+            plan.clicked = true;
+            window.open(plan.url, "_blank");
+            
+            // Status im Display anzeigen
+            display.innerHTML = "<span style='color:green;'>Abgeschickt</span>";
+            
+            // Button komplett entfernen
+            btn.remove();
+            row.style.background = "rgba(0, 255, 0, 0.05)";
+        };
 
         const interval = setInterval(() => {
             const now = Date.now();
-            const diff = sendTime - now;
+            const diff = plan.launchTime.getTime() - now;
 
             if (diff <= 0) {
-                countdown.innerHTML = "<span style='color:green;font-weight:bold;'>JETZT!</span>";
-                btn.disabled = false;
-                btn.style.background = "green";
-                clearInterval(interval);
+                if (!plan.clicked) {
+                    display.innerHTML = "<span style='color:green;'>JETZT!</span>";
+                    btn.disabled = false;
+                    btn.style.background = "green";
+                    btn.style.color = "white";
+
+                    // Check ob Zeit abgelaufen (20 Sek Puffer)
+                    if (diff < -LATE_TOLERANCE) {
+                        display.innerHTML = "<span style='color:red;'>Verpasst</span>";
+                        // Button komplett entfernen
+                        btn.remove();
+                        row.style.background = "rgba(255, 0, 0, 0.05)";
+                        clearInterval(interval);
+                    }
+                } else {
+                    // Bereits geklickt, Timer stoppen
+                    clearInterval(interval);
+                }
                 return;
             }
 
-            if (diff <= WARNING_TIME && !plan.warned) {
+            if (diff <= warningTimeMs && !plan.warned) {
                 playSound();
                 plan.warned = true;
+                row.style.background = "#ffd700";
             }
 
-            countdown.textContent = formatTime(diff);
-
+            const total = Math.floor(diff / 1000);
+            const m = Math.floor(total / 60);
+            const s = total % 60;
+            display.textContent = `${m}:${s.toString().padStart(2, '0')}`;
         }, 100);
-    }
-
-    function formatTime(ms) {
-        const total = Math.floor(ms / 1000);
-        const m = Math.floor(total / 60);
-        const s = total % 60;
-        return `${m}:${s.toString().padStart(2, '0')}`;
     }
 
     function init() {
@@ -133,20 +134,18 @@ javascript:(function () {
 
         document.getElementById("startTimers").onclick = () => {
             const input = document.getElementById("bbcodeInput").value;
+            const warningSec = parseInt(document.getElementById("warningSeconds").value) || 10;
             const plans = parseBBCode(input);
-
-            document.getElementById("timerList").innerHTML = "";
 
             if (!plans.length) {
                 alert("Kein gültiger BBCode!");
                 return;
             }
 
-            // 🔥 Import-Feld ausblenden nach Start
-            document.getElementById("bbcodeInput").style.display = "none";
-            document.getElementById("startTimers").style.display = "none";
+            document.getElementById("setupContainer").remove();
+            document.getElementById("plannerHeader").style.marginBottom = "5px";
 
-            plans.forEach(p => createTimer(p));
+            plans.forEach(p => createTimer(p, warningSec * 1000));
         };
     }
 
