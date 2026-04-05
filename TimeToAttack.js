@@ -78,48 +78,46 @@ javascript:(function () {
         const display = row.querySelector(`#display_${plan.coords.replace('|','_')}`);
         const btn = row.querySelector(`#btn_${plan.coords.replace('|','_')}`);
 
+        // Timer-Variable vorab deklarieren
+        let interval;
+
         btn.onclick = () => {
             plan.clicked = true;
+            clearInterval(interval); // Stoppt den Timer sofort beim Klick
             window.open(plan.url, "_blank");
-            
-            // Status im Display anzeigen
             display.innerHTML = "<span style='color:green;'>Abgeschickt</span>";
-            
-            // Button komplett entfernen
             btn.remove();
             row.style.background = "rgba(0, 255, 0, 0.05)";
         };
 
-        const interval = setInterval(() => {
+        interval = setInterval(() => {
             const now = Date.now();
             const diff = plan.launchTime.getTime() - now;
+
+            // Warnung UND Button-Aktivierung
+            if (diff <= warningTimeMs && !plan.warned) {
+                playSound();
+                plan.warned = true;
+                row.style.background = "#ffd700";
+                btn.disabled = false;
+                btn.style.background = "green";
+                btn.style.color = "white";
+            }
 
             if (diff <= 0) {
                 if (!plan.clicked) {
                     display.innerHTML = "<span style='color:green;'>JETZT!</span>";
-                    btn.disabled = false;
-                    btn.style.background = "green";
-                    btn.style.color = "white";
 
-                    // Check ob Zeit abgelaufen (20 Sek Puffer)
                     if (diff < -LATE_TOLERANCE) {
                         display.innerHTML = "<span style='color:red;'>Verpasst</span>";
-                        // Button komplett entfernen
                         btn.remove();
                         row.style.background = "rgba(255, 0, 0, 0.05)";
                         clearInterval(interval);
                     }
                 } else {
-                    // Bereits geklickt, Timer stoppen
                     clearInterval(interval);
                 }
                 return;
-            }
-
-            if (diff <= warningTimeMs && !plan.warned) {
-                playSound();
-                plan.warned = true;
-                row.style.background = "#ffd700";
             }
 
             const total = Math.floor(diff / 1000);
