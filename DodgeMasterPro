@@ -1,329 +1,195 @@
-javascript:(function () { 
+javascript:(function () {  
 
-    const CONFIG = { 
+    const CONFIG = {  
+        minDist: 3.0,  
+        maxDist: 8.0,  
+        title: "Dodge-Master (Precise Arrival)",  
+        warningTimeMs: 15000,  
+        lateTolerance: 5000  
+    };  
 
-        minDist: 3.0, 
-
-        maxDist: 8.0, 
-
-        title: "Dodge-Master (Timer-Edition)",
-
-        warningTimeMs: 15000, // 15 Sekunden vorher Warnung
-
-        lateTolerance: 5000   // 5 Sekunden nach 0:00 "Verpasst"
-
+    const getCurrentServerTime = () => { 
+        try { 
+            return timing.getTimingObject().getTime(); 
+        } catch (e) { 
+            return Date.now() + (window.Timing ? window.Timing.offset || 0 : 0); 
+        } 
     }; 
 
+    function playSound() {  
+        new Audio("https://www.soundjay.com/misc_c2026/sounds/hohner-melodica-1.mp3").play();  
+    }  
 
-     function playSound() {
-        new Audio("https://www.soundjay.com/misc_c2026/sounds/hohner-melodica-1.mp3").play();
-    }
+    if (document.getElementById("ra_dodge_popup")) document.getElementById("ra_dodge_popup").remove();  
+    const box = document.createElement("div");  
+    box.id = "ra_dodge_popup";  
 
-    
+    box.style = "position:fixed; top:50px; left:50px; width:360px; background:#f4e4bc; border:2px solid #603000; z-index:10000; font-family: Verdana; border-radius: 4px; box-shadow: 5px 5px 15px rgba(0,0,0,0.4);";  
 
-    /* UI Setup */ 
+    box.innerHTML = `<div id="ra_h" style="background:#603000; color:white; padding:8px; cursor:move; font-weight:bold; display:flex; justify-content:space-between;">  
+                        <span>${CONFIG.title}</span>  
+                        <span onclick="this.parentElement.parentElement.remove()" style="cursor:pointer;">X</span>  
+                     </div>  
+                     <div id="ra_list" style="padding:10px; max-height:400px; overflow-y:auto; display:flex; flex-direction:column; gap:8px;">Scanning...</div>`;  
+    document.body.appendChild(box);  
 
-    if (document.getElementById("ra_dodge_popup")) document.getElementById("ra_dodge_popup").remove(); 
+    let isDragging = false, offset = [0,0];  
 
-    const box = document.createElement("div"); 
+    document.getElementById("ra_h").onmousedown = (e) => { isDragging = true; offset = [box.offsetLeft - e.clientX, box.offsetTop - e.clientY]; };  
 
-    box.id = "ra_dodge_popup"; 
+    document.onmousemove = (e) => { if (isDragging) { box.style.left = (e.clientX + offset[0]) + "px"; box.style.top = (e.clientY + offset[1]) + "px"; } };  
+    document.onmouseup = () => isDragging = false;  
 
-    box.style = "position:fixed; top:50px; left:50px; width:360px; background:#f4e4bc; border:2px solid #603000; z-index:10000; font-family: Verdana; border-radius: 4px; box-shadow: 5px 5px 15px rgba(0,0,0,0.4);"; 
+    let bbVillages = [];  
+    fetch("/map/village.txt").then(r => r.text()).then(d => {  
+        d.trim().split("\n").forEach(l => {  
+            const v = l.split(",");  
+            if (v[4] === "0") {  
+                const dist = Math.sqrt(Math.pow(game_data.village.x - v[2], 2) + Math.pow(game_data.village.y - v[3], 2));  
+                if (dist >= CONFIG.minDist && dist <= CONFIG.maxDist) bbVillages.push({id: v[0], x: v[2], y: v[3], dist: dist});  
+            }  
+        });  
+        bbVillages.sort((a,b) => a.dist - b.dist);  
+        findAttacksByAnyMeans();  
+    });  
 
-    box.innerHTML = `<div id="ra_h" style="background:#603000; color:white; padding:8px; cursor:move; font-weight:bold; display:flex; justify-content:space-between;">
-
-                        <span>${CONFIG.title}</span>
-
-                        <span onclick="this.parentElement.parentElement.remove()" style="cursor:pointer;">X</span>
-
-                     </div> 
-
-                     <div id="ra_list" style="padding:10px; max-height:400px; overflow-y:auto; display:flex; flex-direction:column; gap:8px;">Scanning...</div>`; 
-
-    document.body.appendChild(box); 
-
-
-    /* Draggable */ 
-
-    let isDragging = false, offset = [0,0]; 
-
-    document.getElementById("ra_h").onmousedown = (e) => { isDragging = true; offset = [box.offsetLeft - e.clientX, box.offsetTop - e.clientY]; }; 
-
-    document.onmousemove = (e) => { if (isDragging) { box.style.left = (e.clientX + offset[0]) + "px"; box.style.top = (e.clientY + offset[1]) + "px"; } }; 
-
-    document.onmouseup = () => isDragging = false; 
-
-
-    let bbVillages = []; 
-
-    fetch("/map/village.txt").then(r => r.text()).then(d => { 
-
-        d.trim().split("\n").forEach(l => { 
-
-            const v = l.split(","); 
-
-            if (v[4] === "0") { 
-
-                const dist = Math.sqrt(Math.pow(game_data.village.x - v[2], 2) + Math.pow(game_data.village.y - v[3], 2)); 
-
-                if (dist >= CONFIG.minDist && dist <= CONFIG.maxDist) bbVillages.push({id: v[0], x: v[2], y: v[3], dist: dist}); 
-
-            } 
-
-        }); 
-
-        bbVillages.sort((a,b) => a.dist - b.dist); 
-
-        findAttacksByAnyMeans(); 
-
-    }); 
-
-
-    function findAttacksByAnyMeans() { 
-
-        const list = document.getElementById("ra_list"); 
-
-        list.innerHTML = ""; 
-
-        let attacks = []; 
-
-
-        const rows = document.querySelectorAll("#incomings_table tr.nowrap");
-
+    function findAttacksByAnyMeans() {  
+        const list = document.getElementById("ra_list");  
+        list.innerHTML = "";  
+        let attacks = [];  
         
+        const headers = Array.from(document.querySelectorAll("#incomings_table th")); 
+        const arrivalIdx = headers.findIndex(th => th.innerText.includes("Arrival") || th.innerText.includes("Ankunft")); 
 
-        rows.forEach(row => {
+        const rows = document.querySelectorAll("#incomings_table tr.nowrap");  
+        
+        rows.forEach(row => {  
+            const cells = row.querySelectorAll("td"); 
+            if (!cells[arrivalIdx]) return; 
 
-            const rowText = row.innerText;
+            const arrivalText = cells[arrivalIdx].innerText; 
+            const timeMatch = arrivalText.match(/(\d{1,2}):(\d{2}):(\d{2}):?(\d{3})?/);  
+            const isSupport = /Unterstützung|Support/i.test(row.innerText);  
 
-            const timeMatch = rowText.match(/\d{1,2}:\d{2}:\d{2}/);
+            if (timeMatch && !isSupport) {  
+                const link = row.querySelector("a[href*='screen=overview']");  
+                const vIdMatch = link ? link.href.match(/village=(\d+)/) : null;  
 
-            const isSupport = /Unterstützung|Support/i.test(rowText);
-
-
-            if (timeMatch && !isSupport) {
-
-                const link = row.querySelector("a[href*='screen=overview']");
-
-                const vIdMatch = link ? link.href.match(/village=(\d+)/) : null;
-
-
-                if (link && vIdMatch) { 
-
-                    const vId = vIdMatch[1]; 
-
-                    if (!attacks.find(a => a.id === vId)) { 
-
-                        // Zielzeit berechnen
-
-                        const [h, m, s] = timeMatch[0].split(":").map(Number);
-
-                        const targetDate = new Date();
-
-                        targetDate.setHours(h, m, s, 0);
-
+                if (link && vIdMatch) {  
+                    const vId = vIdMatch[1];  
+                    if (!attacks.find(a => a.id === vId)) {  
+                        const h = parseInt(timeMatch[1]); 
+                        const m = parseInt(timeMatch[2]); 
+                        const s = parseInt(timeMatch[3]); 
+                        const ms = timeMatch[4] ? parseInt(timeMatch[4]) : 0; 
                         
+                        const sNow = getCurrentServerTime(); 
+                        const sDateObj = new Date(sNow); 
+                        
+                        let targetDate = new Date( 
+                            sDateObj.getFullYear(), 
+                            sDateObj.getMonth(), 
+                            sDateObj.getDate(), 
+                            h, m, s, ms 
+                        );  
 
-                        // Falls die Zeit heute schon vorbei ist, ist es für morgen geplant
+                        if (targetDate.getTime() < sNow) {  
+                            targetDate.setDate(targetDate.getDate() + 1);  
+                        }  
 
-                        if (targetDate.getTime() < Date.now() - 10000) {
+                        /* Berechnete Zeit nehmen und 23 Stunden abziehen */
+                        const finalLaunchTime = targetDate.getTime() - (23 * 60 * 60 * 1000);
 
-                            targetDate.setDate(targetDate.getDate() + 1);
+                        attacks.push({  
+                            id: vId,  
+                            name: link.innerText.trim() || "Dorf",  
+                            launchTime: finalLaunchTime,  
+                            warned: false,  
+                            clicked: false  
+                        });  
+                    }  
+                }  
+            }  
+        });  
 
-                        }
+        if (attacks.length === 0) {  
+            list.innerHTML = "<div style='color:red; font-size:11px; text-align:center;'>Keine Angriffe erkannt.</div>";  
+            return;  
+        }  
+        attacks.forEach(atk => createTimerRow(atk, list));  
+    }  
 
+    function createTimerRow(atk, parent) {  
+        const bb = bbVillages[0];  
+        const row = document.createElement("div");  
 
-                        attacks.push({ 
-
-                            id: vId, 
-
-                            name: link.innerText.trim() || "Dorf", 
-
-                            launchTime: targetDate,
-
-                            warned: false,
-
-                            clicked: false
-
-                        }); 
-
-                    } 
-
-                } 
-
-            }
-
-        }); 
-
-
-        if (attacks.length === 0) { 
-
-            list.innerHTML = "<div style='color:red; font-size:11px; text-align:center;'>Keine Angriffe erkannt.</div>"; 
-
-            return; 
-
-        } 
-
-
-        attacks.forEach(atk => createTimerRow(atk, list)); 
-
-    } 
-
-
-    function createTimerRow(atk, parent) {
-
-        const bb = bbVillages[0];
-
-        const row = document.createElement("div"); 
-
-        row.style = "background:white; border:1px solid #bd9c5a; padding:8px; font-size:11px; border-radius:3px; display:flex; flex-direction:column; gap:5px;"; 
-
+        row.style = "background:white; border:1px solid #bd9c5a; padding:8px; font-size:11px; border-radius:3px; display:flex; flex-direction:column; gap:5px;";  
+        row.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center;">  
+                            <b>${atk.name}</b>  
+                            <span id="display_${atk.id}" style="font-weight:bold; font-family:monospace; color:red; font-size:13px;">Lade...</span>  
+                         </div>  
+                         <button id="btn_${atk.id}" style="width:100%; background:${bb?'#666':'#333'}; color:white; border:none; padding:6px; cursor:pointer; font-weight:bold; border-radius:3px;">  
+                            DODGE TO ${bb ? bb.x+'|'+bb.y : 'NO BB'}  
+                         </button>`;  
         
+        parent.appendChild(row);  
+        const display = row.querySelector(`#display_${atk.id}`);  
+        const btn = row.querySelector(`#btn_${atk.id}`);  
+        const url = `/game.php?village=${atk.id}&screen=place&target=${bb?bb.id:''}#dodge_go`;  
 
-        row.innerHTML = ` 
+        btn.onclick = () => {  
+            atk.clicked = true;  
+            window.open(url, "_blank");  
+            display.innerHTML = "<span style='color:green;'>Offen</span>";  
+            btn.style.background = "#21881e";  
+        };  
 
-            <div style="display:flex; justify-content:space-between; align-items:center;"> 
+        const interval = setInterval(() => {  
+            const now = getCurrentServerTime();  
+            const diff = atk.launchTime - now;  
 
-                <b>${atk.name}</b> 
+            if (diff <= CONFIG.warningTimeMs && !atk.warned) {  
+                playSound();  
+                atk.warned = true;  
+                row.style.background = "#ffd700";  
+                btn.style.background = "#21881e";  
+            }  
 
-                <span id="display_${atk.id}" style="font-weight:bold; font-family:monospace; color:red; font-size:13px;">Lade...</span> 
+            if (diff <= 0) {  
+                if (!atk.clicked) {  
+                    display.innerHTML = "<span style='color:green;'>JETZT!</span>";  
+                    if (diff < -CONFIG.lateTolerance) {  
+                        display.innerHTML = "<span style='color:grey;'>Vorbei</span>";  
+                        row.style.background = "rgba(0,0,0,0.05)";  
+                        btn.style.background = "#666";  
+                        clearInterval(interval);  
+                    }  
+                } else {  
+                    clearInterval(interval);  
+                }  
+                return;  
+            }  
 
-            </div> 
-
-            <button id="btn_${atk.id}" 
-
-                    style="width:100%; background:${bb?'#666':'#333'}; color:white; border:none; padding:6px; cursor:pointer; font-weight:bold; border-radius:3px;"> 
-
-                DODGE TO ${bb ? bb.x+'|'+bb.y : 'NO BB'} 
-
-            </button>`; 
-
-        
-
-        parent.appendChild(row);
-
-
-        const display = row.querySelector(`#display_${atk.id}`);
-
-        const btn = row.querySelector(`#btn_${atk.id}`);
-
-        const url = `/game.php?village=${atk.id}&screen=place&target=${bb?bb.id:''}#dodge_go`;
-
-
-        btn.onclick = () => {
-
-            atk.clicked = true;
-
-            window.open(url, "_blank");
-
-            display.innerHTML = "<span style='color:green;'>Offen</span>";
-
-            btn.style.background = "#21881e";
-
-        };
-
-
-        const interval = setInterval(() => {
-
-            const now = Date.now();
-
-            const diff = atk.launchTime.getTime() - now;
-
-
-            // Warnung
-
-            if (diff <= CONFIG.warningTimeMs && !atk.warned) {
-
-                playSound();
-
-                atk.warned = true;
-
-                row.style.background = "#ffd700";
-
-                btn.style.background = "#21881e";
-
-            }
-
-
-            if (diff <= 0) {
-
-                if (!atk.clicked) {
-
-                    display.innerHTML = "<span style='color:green;'>JETZT!</span>";
-
-                    if (diff < -CONFIG.lateTolerance) {
-
-                        display.innerHTML = "<span style='color:grey;'>Vorbei</span>";
-
-                        row.style.background = "rgba(0,0,0,0.05)";
-
-                        btn.style.background = "#666";
-
-                        clearInterval(interval);
-
-                    }
-
-                } else {
-
-                    clearInterval(interval);
-
-                }
-
-                return;
-
-            }
-
-
-            const total = Math.floor(diff / 1000);
-
-            const h = Math.floor(total / 3600);
-
-            const m = Math.floor((total % 3600) / 60);
-
-            const s = total % 60;
-
+            const total = Math.floor(diff / 1000);  
+            const m = Math.floor(total / 60);  
+            const s = total % 60;  
             
+            /* Anzeige Format: MM:SS */
+            let timeStr = m.toString().padStart(2, '0') + ":" + s.toString().padStart(2, '0');  
+            display.textContent = timeStr;  
+        }, 200);  
+    }  
 
-            // Formatierung: nur m:ss wenn unter einer Stunde, sonst h:m:ss
-
-            let timeStr = "";
-
-            if (h > 0) timeStr += h + ":";
-
-            timeStr += m.toString().padStart(2, '0') + ":" + s.toString().padStart(2, '0');
-
-            display.textContent = timeStr;
-
-        }, 200);
-
-    }
-
-
-    /* Auto-Fill für den Versammlungsplatz */ 
-
-    if (window.location.hash === "#dodge_go" && game_data.screen === "place") { 
-
-        setTimeout(() => { 
-
-            const units = ["spear", "sword", "axe", "archer", "light", "marcher", "heavy", "ram", "catapult", "knight", "snob"]; 
-
-            units.forEach(u => { 
-
-                const input = document.getElementById("unit_input_"+u); 
-
-                if (input && input.nextElementSibling && input.nextElementSibling.tagName === 'A') { 
-
-                    input.nextElementSibling.click(); 
-
-                } 
-
-            }); 
-
-            document.getElementById("target_attack").focus(); 
-
-        }, 250); 
-
-    } 
-
+    if (window.location.hash === "#dodge_go" && game_data.screen === "place") {  
+        setTimeout(() => {  
+            const units = ["spear", "sword", "axe", "archer", "light", "marcher", "heavy", "ram", "catapult", "knight", "snob"];  
+            units.forEach(u => {  
+                const input = document.getElementById("unit_input_"+u);  
+                if (input && input.nextElementSibling && input.nextElementSibling.tagName === 'A') {  
+                    input.nextElementSibling.click();  
+                }  
+            });  
+            document.getElementById("target_attack").focus();  
+        }, 250);  
+    }  
 })();
