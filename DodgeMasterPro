@@ -15,10 +15,8 @@ javascript:(function () {
     }; 
 
 
-    function playSound() {
-
-        new Audio("https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3").play().catch(() => {});
-
+     function playSound() {
+        new Audio("https://www.soundjay.com/misc_c2026/sounds/hohner-melodica-1.mp3").play();
     }
 
     
