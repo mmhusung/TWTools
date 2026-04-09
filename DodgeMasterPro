@@ -126,7 +126,7 @@ javascript:(function () {
         row.style = "background:white; border:1px solid #bd9c5a; padding:8px; font-size:11px; border-radius:3px; display:flex; flex-direction:column; gap:5px;";  
         row.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center;">  
                             <b>${atk.name}</b>  
-                            <span id="display_${atk.id}" style="font-weight:bold; font-family:monospace; color:red; font-size:13px;">Lade...</span>  
+                            <span id="display_${atk.id}" style="font-weight:bold; font-family:monospace; color:red; font-size:26px;">Lade...</span>  
                          </div>  
                          <button id="btn_${atk.id}" style="width:100%; background:${bb?'#666':'#333'}; color:white; border:none; padding:6px; cursor:pointer; font-weight:bold; border-radius:3px;">  
                             DODGE TO ${bb ? bb.x+'|'+bb.y : 'NO BB'}  
