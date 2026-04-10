@@ -8,6 +8,13 @@ javascript:(function () {
         lateTolerance: 5000  
     };  
 
+    /* Prüfung auf die richtige Seite mit originaler Fehlermeldung */
+    if (!(game_data.screen === "overview_villages" && window.location.href.includes("mode=incomings")) && 
+        !(window.location.hash === "#dodge_go" && game_data.screen === "place")) {
+        UI.ErrorMessage("Das Skript muss auf der Seite 'Ankommend' ausgeführt werden!", 5000);
+        return;
+    }
+
     const getCurrentServerTime = () => { 
         try { 
             return timing.getTimingObject().getTime(); 
