@@ -17,7 +17,7 @@ javascript:(function () {
     }; 
 
     function playSound() {  
-        new Audio("https://www.soundjay.com/misc_c2026/sounds/hohner-melodica-1.mp3").play();  
+        new Audio("https://www.soundjay.com/misc_c2026/sounds/whistle-flute-2.mp3").play();  
     }  
 
     if (document.getElementById("ra_dodge_popup")) document.getElementById("ra_dodge_popup").remove();  
