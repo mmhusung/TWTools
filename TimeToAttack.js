@@ -1,7 +1,12 @@
 javascript:(function () {
 
     const titleText = "Time To Attack";
-    const LATE_TOLERANCE = 20000; // 20 Sekunden Zeitpuffer
+    const LATE_TOLERANCE = 20000; 
+
+    const getCurrentServerTime = () => { 
+        try { return timing.getTimingObject().getTime(); } 
+        catch (e) { return Date.now() + (window.Timing ? window.Timing.offset || 0 : 0); } 
+    }; 
 
     function createUI() {
         if (document.getElementById("bbcodePlanner")) return;
@@ -26,6 +31,10 @@ javascript:(function () {
                     <span>Warnung (Sekunden):</span>
                     <input type="number" id="warningSeconds" value="10" style="width:50px; border:1px solid #603000;">
                 </div>
+                <div style="margin: 8px 0; display:flex; align-items:center; gap:5px;">
+                    <input type="checkbox" id="speedMode" style="cursor:pointer;">
+                    <label for="speedMode" style="cursor:pointer; font-weight:bold;">Speed Tribal Wars (23h Dodge)</label>
+                </div>
                 <button id="startTimers" style="width:100%; padding:5px; cursor:pointer; background:#21881e; color:white; border:none; font-weight:bold;">Timer starten</button>
             </div>
 
@@ -36,17 +45,28 @@ javascript:(function () {
         document.getElementById("closePlanner").onclick = () => box.remove();
     }
 
-    function parseBBCode(bbcode) {
-        const regex = /\[\*\]\[unit\](.*?)\[\/unit\]\[\|\]\s*(\d+\|\d+).*?\[\|\](\d+\/\d+\/\d+\s+\d+:\d+:\d+).*?\[url=(.*?)\]/g;
+    function parseBBCode(bbcode, isSpeed) {
+        const regex = /\[\*\]\[unit\](.*?)\[\/unit\]\[\|\]\s*(\d+\|\d+).*?\[\|\]\d+\/\d+\/\d+\s+(\d+):(\d+):(\d+).*?\[url=(.*?)\]/g;
         let result = [];
         let match;
 
         while ((match = regex.exec(bbcode)) !== null) {
+            const sNow = getCurrentServerTime();
+            const sDate = new Date(sNow);
+            
+            let targetDate = new Date(sDate.getFullYear(), sDate.getMonth(), sDate.getDate(), parseInt(match[3]), parseInt(match[4]), parseInt(match[5]), 0);
+            if (targetDate.getTime() < sNow) targetDate.setDate(targetDate.getDate() + 1);
+
+            let launchTimeMs = targetDate.getTime();
+            if (isSpeed) {
+                launchTimeMs -= (23 * 60 * 60 * 1000);
+            }
+
             result.push({
                 unit: match[1],
                 coords: match[2],
-                launchTime: new Date(match[3].replace(/(\d+)\/(\d+)\/(\d+)/, "$3-$2-$1")),
-                url: match[4],
+                launchTime: launchTimeMs,
+                url: match[6],
                 warned: false,
                 clicked: false
             });
@@ -78,12 +98,11 @@ javascript:(function () {
         const display = row.querySelector(`#display_${plan.coords.replace('|','_')}`);
         const btn = row.querySelector(`#btn_${plan.coords.replace('|','_')}`);
 
-        // Timer-Variable vorab deklarieren
         let interval;
 
         btn.onclick = () => {
             plan.clicked = true;
-            clearInterval(interval); // Stoppt den Timer sofort beim Klick
+            clearInterval(interval);
             window.open(plan.url, "_blank");
             display.innerHTML = "<span style='color:green;'>Abgeschickt</span>";
             btn.remove();
@@ -91,10 +110,9 @@ javascript:(function () {
         };
 
         interval = setInterval(() => {
-            const now = Date.now();
-            const diff = plan.launchTime.getTime() - now;
+            const now = getCurrentServerTime();
+            const diff = plan.launchTime - now;
 
-            // Warnung UND Button-Aktivierung
             if (diff <= warningTimeMs && !plan.warned) {
                 playSound();
                 plan.warned = true;
@@ -133,7 +151,8 @@ javascript:(function () {
         document.getElementById("startTimers").onclick = () => {
             const input = document.getElementById("bbcodeInput").value;
             const warningSec = parseInt(document.getElementById("warningSeconds").value) || 10;
-            const plans = parseBBCode(input);
+            const isSpeed = document.getElementById("speedMode").checked;
+            const plans = parseBBCode(input, isSpeed);
 
             if (!plans.length) {
                 alert("Kein gültiger BBCode!");
