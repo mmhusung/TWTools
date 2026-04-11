@@ -833,26 +833,29 @@ function getCodePlans(plans, destinationVillage) {
     return planCode;
 }
 
-// Helper: Calculate distance between 2 villages
+// Ersetze die gesamte Funktion calculateDistance durch diesen Block:
 function calculateDistance(villageA, villageB) {
-    // Falls villageA oder villageB noch Namen enthalten, filtern wir sie hier direkt
-    const matchA = villageA.match(/\d{1,3}\|\d{1,3}/);
-    const matchB = villageB.match(/\d{1,3}\|\d{1,3}/);
+    // Falls villageA oder villageB Objekte oder Strings mit Namen sind, 
+    // extrahieren wir hier NUR die reinen Zahlenmuster (XXX|YYY)
+    const extract = (str) => {
+        if (typeof str !== 'string') str = String(str);
+        const match = str.match(/\d{1,3}\|\d{1,3}/);
+        return match ? match[0] : null;
+    };
 
-    if (!matchA || !matchB) return 0;
+    const coordA = extract(villageA);
+    const coordB = extract(villageB);
 
-    const partsA = matchA[0].split('|');
-    const partsB = matchB[0].split('|');
+    // Wenn keine Koordinaten gefunden wurden, Distanz 0 zurückgeben
+    if (!coordA || !coordB) return 0;
 
-    const x1 = parseInt(partsA[0]);
-    const y1 = parseInt(partsA[1]);
-
-    const x2 = parseInt(partsB[0]);
-    const y2 = parseInt(partsB[1]);
+    const [x1, y1] = coordA.split('|').map(num => parseInt(num, 10));
+    const [x2, y2] = coordB.split('|').map(num => parseInt(num, 10));
 
     const deltaX = x1 - x2;
     const deltaY = y1 - y2;
 
+    // Mathematisch korrekte Distanz ohne Einfluss von Sonderzeichen
     return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
 }
 
