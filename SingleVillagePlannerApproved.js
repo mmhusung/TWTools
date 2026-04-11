@@ -376,7 +376,7 @@ async function initAttackPlanner(groupId) {
 
     const destinationVillageRaw = jQuery('#content_value table table td:eq(2)').text();
     const destinationMatch = destinationVillageRaw.match(/\d{1,3}\|\d{1,3}/);
-    const destinationVillage = destinationMatch ? destinationMatch[0] : "000|000";
+    const destinationVillage = destinationMatch ? destinationMatch[0] : "";
 
     villages = villages.map((item) => {
         const distance = calculateDistance(item.coords, destinationVillage);
@@ -835,18 +835,25 @@ function getCodePlans(plans, destinationVillage) {
 
 // Helper: Calculate distance between 2 villages
 function calculateDistance(villageA, villageB) {
-    const x1 = villageA.split('|')[0];
-    const y1 = villageA.split('|')[1];
+    // Falls villageA oder villageB noch Namen enthalten, filtern wir sie hier direkt
+    const matchA = villageA.match(/\d{1,3}\|\d{1,3}/);
+    const matchB = villageB.match(/\d{1,3}\|\d{1,3}/);
 
-    const x2 = villageB.split('|')[0];
-    const y2 = villageB.split('|')[1];
+    if (!matchA || !matchB) return 0;
 
-    const deltaX = Math.abs(x1 - x2);
-    const deltaY = Math.abs(y1 - y2);
+    const partsA = matchA[0].split('|');
+    const partsB = matchB[0].split('|');
 
-    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+    const x1 = parseInt(partsA[0]);
+    const y1 = parseInt(partsA[1]);
 
-    return distance;
+    const x2 = parseInt(partsB[0]);
+    const y2 = parseInt(partsB[1]);
+
+    const deltaX = x1 - x2;
+    const deltaY = y1 - y2;
+
+    return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
 }
 
 // Helper: Get launch time of command
