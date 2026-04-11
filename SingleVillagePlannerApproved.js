@@ -372,17 +372,15 @@ async function initAttackPlanner(groupId) {
     troopCounts = await fetchTroopsForCurrentGroup(groupId);
     let villages = await fetchAllPlayerVillagesByGroup(groupId);
 
-    // SCHRITT 1: Den rohen Text auslesen
-    const destinationVillageRaw = jQuery('#content_value table table td:eq(2)').text();
-
-    // SCHRITT 2: Nur die Koordinate (XXX|YYY) herausfiltern
-    const destinationMatch = destinationVillageRaw.match(/\d{1,3}\|\d{1,3}/);
-    const destinationVillage = destinationMatch ? destinationMatch[0] : destinationVillageRaw;
-
-    // Jetzt ist destinationVillage z.B. nur noch "500|500" - der Shark* ist weg!
+    // Wir holen den Text (z.B. "Dorfname (123|456) Shark*")
+    const rawText = jQuery('#content_value table table td:eq(2)').text();
+    
+    // Wir extrahieren SOFORT nur die Koordinate. Alles andere (Name, K-Nummer) wird gelöscht.
+    const destinationMatch = rawText.match(/\d{1,3}\|\d{1,3}/);
+    const destinationVillage = destinationMatch ? destinationMatch[0] : "000|000";
 
     villages = villages.map((item) => {
-        // SCHRITT 3: Sicher berechnen
+        // Hier wird jetzt garantiert mit "123|456" gerechnet, der Name ist bereits weg.
         const distance = calculateDistance(item.coords, destinationVillage);
         return {
             ...item,
@@ -390,11 +388,10 @@ async function initAttackPlanner(groupId) {
         };
     });
 
-    villages = villages.sort((a, b) => {
-        return a.distance - b.distance;
-    });
-    
+    villages.sort((a, b) => a.distance - b.distance);
+
     // ... Rest des Codes
+    
 
     const content = prepareContent(villages, groups);
     renderUI(content);
@@ -841,20 +838,21 @@ function getCodePlans(plans, destinationVillage) {
 
 // Helper: Calculate distance between 2 villages
 function calculateDistance(villageA, villageB) {
-    const extract = (str) => {
-        if (typeof str !== 'string') str = String(str);
-        // Sucht NUR nach dem Muster Zahl|Zahl (z.B. 500|500)
-        const match = str.match(/\d{1,3}\|\d{1,3}/);
+    // Diese interne Funktion zieht NUR die Zahlen-Koordinaten aus JEDEM Text
+    const getOnlyCoords = (input) => {
+        const string = String(input);
+        const match = string.match(/\d{1,3}\|\d{1,3}/);
         return match ? match[0] : null;
     };
 
-    const coordA = extract(villageA);
-    const coordB = extract(villageB);
+    const cleanA = getOnlyCoords(villageA);
+    const cleanB = getOnlyCoords(villageB);
 
-    if (!coordA || !coordB) return 0;
+    // Wenn er keine Koordinate findet, gibt er 0 zurück, um den Fehler zu verhindern
+    if (!cleanA || !cleanB) return 0;
 
-    const [x1, y1] = coordA.split('|').map(num => parseInt(num, 10));
-    const [x2, y2] = coordB.split('|').map(num => parseInt(num, 10));
+    const [x1, y1] = cleanA.split('|').map(num => parseInt(num, 10));
+    const [x2, y2] = cleanB.split('|').map(num => parseInt(num, 10));
 
     const deltaX = x1 - x2;
     const deltaY = y1 - y2;
