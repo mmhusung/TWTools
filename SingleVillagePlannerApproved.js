@@ -376,7 +376,7 @@ async function initAttackPlanner(groupId) {
 
     const destinationVillageRaw = jQuery('#content_value table table td:eq(2)').text();
     const destinationMatch = destinationVillageRaw.match(/\d{1,3}\|\d{1,3}/);
-    const destinationVillage = destinationMatch ? destinationMatch[0] : "";
+    const destinationVillage = destinationMatch ? destinationMatch[0] : destinationVillageRaw;
 
     villages = villages.map((item) => {
         const distance = calculateDistance(item.coords, destinationVillage);
@@ -1177,8 +1177,7 @@ async function fetchAllPlayerVillagesByGroup(groupId) {
                         .find('td:eq(0)')
                         .text()
                         .trim();
-                    const rawCoords = jQuery(this).find('td:eq(1)').text().trim();
-                    const coordMatch = rawCoords.match(/\d{1,3}\|\d{1,3}/); 
+                    const coordMatch = jQuery(this).text().match(/\d{1,3}\|\d{1,3}/);
                     const villageCoords = coordMatch ? coordMatch[0] : "000|000";
 
                     villagesList.push({
