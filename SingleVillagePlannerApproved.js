@@ -367,18 +367,22 @@ if (LAST_UPDATED_TIME !== null) {
     fetchUnitInfo();
 }
 
-// Initialize Attack Planner
 async function initAttackPlanner(groupId) {
-    // run on script load
     const groups = await fetchVillageGroups();
     troopCounts = await fetchTroopsForCurrentGroup(groupId);
     let villages = await fetchAllPlayerVillagesByGroup(groupId);
 
+    // SCHRITT 1: Den rohen Text auslesen
     const destinationVillageRaw = jQuery('#content_value table table td:eq(2)').text();
+
+    // SCHRITT 2: Nur die Koordinate (XXX|YYY) herausfiltern
     const destinationMatch = destinationVillageRaw.match(/\d{1,3}\|\d{1,3}/);
     const destinationVillage = destinationMatch ? destinationMatch[0] : destinationVillageRaw;
 
+    // Jetzt ist destinationVillage z.B. nur noch "500|500" - der Shark* ist weg!
+
     villages = villages.map((item) => {
+        // SCHRITT 3: Sicher berechnen
         const distance = calculateDistance(item.coords, destinationVillage);
         return {
             ...item,
@@ -389,6 +393,8 @@ async function initAttackPlanner(groupId) {
     villages = villages.sort((a, b) => {
         return a.distance - b.distance;
     });
+    
+    // ... Rest des Codes
 
     const content = prepareContent(villages, groups);
     renderUI(content);
@@ -833,12 +839,11 @@ function getCodePlans(plans, destinationVillage) {
     return planCode;
 }
 
-// Ersetze die gesamte Funktion calculateDistance durch diesen Block:
+// Helper: Calculate distance between 2 villages
 function calculateDistance(villageA, villageB) {
-    // Falls villageA oder villageB Objekte oder Strings mit Namen sind, 
-    // extrahieren wir hier NUR die reinen Zahlenmuster (XXX|YYY)
     const extract = (str) => {
         if (typeof str !== 'string') str = String(str);
+        // Sucht NUR nach dem Muster Zahl|Zahl (z.B. 500|500)
         const match = str.match(/\d{1,3}\|\d{1,3}/);
         return match ? match[0] : null;
     };
@@ -846,7 +851,6 @@ function calculateDistance(villageA, villageB) {
     const coordA = extract(villageA);
     const coordB = extract(villageB);
 
-    // Wenn keine Koordinaten gefunden wurden, Distanz 0 zurückgeben
     if (!coordA || !coordB) return 0;
 
     const [x1, y1] = coordA.split('|').map(num => parseInt(num, 10));
@@ -855,7 +859,6 @@ function calculateDistance(villageA, villageB) {
     const deltaX = x1 - x2;
     const deltaY = y1 - y2;
 
-    // Mathematisch korrekte Distanz ohne Einfluss von Sonderzeichen
     return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
 }
 
@@ -1177,8 +1180,10 @@ async function fetchAllPlayerVillagesByGroup(groupId) {
                         .find('td:eq(0)')
                         .text()
                         .trim();
-                    const coordMatch = jQuery(this).text().match(/\d{1,3}\|\d{1,3}/);
-                    const villageCoords = coordMatch ? coordMatch[0] : "000|000";
+                    const villageCoords = jQuery(this)
+                        .find('td:eq(1)')
+                        .text()
+                        .trim();
 
                     villagesList.push({
                         id: parseInt(villageId),
