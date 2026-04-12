@@ -388,7 +388,7 @@ async function initAttackPlanner(groupId) {
     }
 
     const destinationVillage = Array.isArray(finalMatch) ? finalMatch[0] : finalMatch;
-    console.log("Erfolgreich Ziel extrahiert:", destinationVillage);
+    console.log("Erfolgreich das Ziel extrahiert:", destinationVillage);
 
     villages = villages.map((item) => {
         const distance = calculateDistance(item.coords, destinationVillage);
@@ -782,9 +782,14 @@ function getPlans(landingTime, destinationVillage, villagesUnitsToSend) {
 function getBBCodePlans(plans, destinationVillage) {
     const landingTime = jQuery('#raLandingTime').val().trim();
 
-    // FIX: Wir stellen sicher, dass destinationVillage NUR die Koordinate ist
-    const cleanDestinationMatch = destinationVillage.match(/\d{1,3}\|\d{1,3}/);
-    const cleanDestination = cleanDestinationMatch ? cleanDestinationMatch[0] : destinationVillage;
+    // SICHERHEITS-CHECK: Wir suchen die Koordinaten zuerst im Argument, 
+    // und falls das leer ist (wie bei shark*), suchen wir auf der ganzen Seite.
+    let cleanDestinationMatch = destinationVillage.match(/\d{1,3}\|\d{1,3}/);
+    if (!cleanDestinationMatch) {
+        cleanDestinationMatch = jQuery('#content_value').text().match(/\d{1,3}\|\d{1,3}/);
+    }
+    
+    const cleanDestination = cleanDestinationMatch ? cleanDestinationMatch[0] : "000|000";
 
     let bbCode = `[size=12][b]${tt(
         'Plan for:'
@@ -799,15 +804,13 @@ function getBBCodePlans(plans, destinationVillage) {
     plans.forEach((plan) => {
         const { unit, highPrio, coords, villageId, launchTimeFormatted } = plan;
 
-        // Hier wird jetzt mit der sauberen Koordinate gesplittet
+        // Splittet jetzt garantiert eine saubere Koordinate ohne "undefined"
         const [toX, toY] = cleanDestination.split('|');
 
         const priority = highPrio ? tt('Early send') : '';
 
-        let rallyPointData =
-            game_data.market !== 'uk' ? `&x=${toX}&y=${toY}` : '';
-        let sitterData =
-            game_data.player.sitter > 0 ? `&t=${game_data.player.id}` : ''; // & hinzugefügt für korrekte URL
+        let rallyPointData = game_data.market !== 'uk' ? `&x=${toX}&y=${toY}` : '';
+        let sitterData = game_data.player.sitter > 0 ? `&t=${game_data.player.id}` : '';
 
         let commandUrl = `/game.php?${sitterData}&village=${villageId}&screen=place${rallyPointData}`;
 
@@ -824,9 +827,13 @@ function getBBCodePlans(plans, destinationVillage) {
 function getCodePlans(plans, destinationVillage) {
     const landingTime = jQuery('#raLandingTime').val().trim();
 
-    // FIX: Auch hier die Reinigung
-    const cleanDestinationMatch = destinationVillage.match(/\d{1,3}\|\d{1,3}/);
-    const cleanDestination = cleanDestinationMatch ? cleanDestinationMatch[0] : destinationVillage;
+    // Gleicher Sicherheits-Check wie oben
+    let cleanDestinationMatch = destinationVillage.match(/\d{1,3}\|\d{1,3}/);
+    if (!cleanDestinationMatch) {
+        cleanDestinationMatch = jQuery('#content_value').text().match(/\d{1,3}\|\d{1,3}/);
+    }
+    
+    const cleanDestination = cleanDestinationMatch ? cleanDestinationMatch[0] : "000|000";
 
     let planCode = `[size=12][b]${tt(
         'Plan for:'
@@ -841,10 +848,8 @@ function getCodePlans(plans, destinationVillage) {
 
         const priority = highPrio ? tt('Early send') : '';
 
-        let rallyPointData =
-            game_data.market !== 'uk' ? `&x=${toX}&y=${toY}` : '';
-        let sitterData =
-            game_data.player.sitter > 0 ? `&t=${game_data.player.id}` : '';
+        let rallyPointData = game_data.market !== 'uk' ? `&x=${toX}&y=${toY}` : '';
+        let sitterData = game_data.player.sitter > 0 ? `&t=${game_data.player.id}` : '';
 
         let commandUrl = `/game.php?${sitterData}&village=${villageId}&screen=place${rallyPointData}`;
 
