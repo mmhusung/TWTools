@@ -388,7 +388,7 @@ async function initAttackPlanner(groupId) {
     }
 
     const destinationVillage = Array.isArray(finalMatch) ? finalMatch[0] : finalMatch;
-    console.log("Erfolgreich die Ziel extrahiert:", destinationVillage);
+    console.log("Erfolgreich das Ziel extrahiert:", destinationVillage);
 
     villages = villages.map((item) => {
         const distance = calculateDistance(item.coords, destinationVillage);
@@ -607,14 +607,24 @@ function changeVillagePriority() {
 }
 
 // Action Handler: Grab the "chosen" villages and calculate their launch times based on the unit type
+// Action Handler: Grab the "chosen" villages and calculate their launch times based on the unit type
 function calculateLaunchTimes() {
     jQuery('#calculateLaunchTimes').on('click', function (e) {
         e.preventDefault();
 
         const landingTimeString = jQuery('#raLandingTime').val().trim();
-        const destinationVillage = jQuery(
-            '#content_value table table td:eq(2)'
-        ).text();
+        
+        // FIX: Wir lesen nicht mehr aus einer speziellen Tabellenzelle (td:eq(2)).
+        // Wir ziehen uns die Koordinate sicher per Regex aus dem gesamten Content.
+        const pageContent = jQuery('#content_value').text();
+        const coordMatch = pageContent.match(/\d{1,3}\|\d{1,3}/);
+        const destinationVillage = coordMatch ? coordMatch[0] : "";
+
+        // Falls wirklich gar nichts gefunden wird, stoppen wir hier
+        if (destinationVillage === "") {
+            UI.ErrorMessage(tt('Target coordinates could not be found!'));
+            return;
+        }
 
         let villagesUnitsToSend = [];
 
@@ -630,6 +640,7 @@ function calculateLaunchTimes() {
                 ? true
                 : false;
 
+            // Hier wird jetzt mit der sauberen Koordinate gerechnet
             const distance = calculateDistance(coords, destinationVillage);
 
             villagesUnitsToSend.push({
@@ -643,7 +654,10 @@ function calculateLaunchTimes() {
 
         if (villagesUnitsToSend.length > 0 && landingTimeString !== '') {
             UI.SuccessMessage(tt('Launch times are being calculated ...'));
+            
             const landingTime = getLandingTime(landingTimeString);
+            
+            // Wir übergeben das saubere destinationVillage an getPlans
             const plans = getPlans(
                 landingTime,
                 destinationVillage,
@@ -651,8 +665,10 @@ function calculateLaunchTimes() {
             );
 
             if (plans.length > 0) {
+                // Auch für den Export nutzen wir die saubere Koordinate
                 const planBBCode = getBBCodePlans(plans, destinationVillage);
                 const plansCode = getCodePlans(plans, destinationVillage);
+                
                 jQuery('#raVillagePlanner').show();
                 jQuery('#raExportPlanBBCode').val(planBBCode);
                 jQuery('#raExportPlanCode').val(plansCode);
@@ -966,10 +982,7 @@ function getLandingTime(landingTime) {
 // Helper: Render own villages table
 function renderVillagesTable(villages) {
     if (villages.length) {
-        const destinationVillage = jQuery(
-            '#content_value table table td:eq(2)'
-        ).text();
-
+       
         let villagesTable = `
 		<table id="raAttackPlannerTable" class="ra-table" width="100%">
 			<thead>
