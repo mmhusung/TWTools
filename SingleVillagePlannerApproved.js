@@ -372,17 +372,25 @@ async function initAttackPlanner(groupId) {
     troopCounts = await fetchTroopsForCurrentGroup(groupId);
     let villages = await fetchAllPlayerVillagesByGroup(groupId);
 
-    // Wir holen den Text (z.B. "Dorfname (123|456) Shark*")
-    const rawText = jQuery('#content_value table table td:eq(2)').text();
+    // Wir suchen nicht mehr in einer speziellen Tabellenzelle.
+    // Wir nehmen den gesamten Text der Seite.
+    const fullPageText = jQuery('#content_value').text();
 
-    console.debug("Gefundener Text:", rawText);
+    // Wir suchen nach dem Muster XXX|YYY irgendwo im Text
+    const destinationMatch = fullPageText.match(/\d{1,3}\|\d{1,3}/);
     
-    // Wir extrahieren SOFORT nur die Koordinate. Alles andere (Name, K-Nummer) wird gelöscht.
-    const destinationMatch = rawText.match(/\d{1,3}\|\d{1,3}/);
-    const destinationVillage = destinationMatch ? destinationMatch[0] : "000|000";
+    // Falls er nichts findet (Sicherheitsnetz), versuchen wir es im Seitentitel
+    const finalMatch = destinationMatch ? destinationMatch[0] : jQuery('#serverTime').closest('h2').text().match(/\d{1,3}\|\d{1,3}/);
+
+    if (!finalMatch) {
+        alert("Konnte absolut keine Koordinaten auf dieser Seite finden!");
+        return;
+    }
+
+    const destinationVillage = Array.isArray(finalMatch) ? finalMatch[0] : finalMatch;
+    console.log("Erfolgreich Ziel extrahiert:", destinationVillage);
 
     villages = villages.map((item) => {
-        // Hier wird jetzt garantiert mit "123|456" gerechnet, der Name ist bereits weg.
         const distance = calculateDistance(item.coords, destinationVillage);
         return {
             ...item,
