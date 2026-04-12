@@ -375,7 +375,7 @@ async function initAttackPlanner(groupId) {
     // Wir holen den Text (z.B. "Dorfname (123|456) Shark*")
     const rawText = jQuery('#content_value table table td:eq(2)').text();
 
-    console.log("Gefundener Text:", rawText);
+    console.debug("Gefundener Text:", rawText);
     
     // Wir extrahieren SOFORT nur die Koordinate. Alles andere (Name, K-Nummer) wird gelöscht.
     const destinationMatch = rawText.match(/\d{1,3}\|\d{1,3}/);
