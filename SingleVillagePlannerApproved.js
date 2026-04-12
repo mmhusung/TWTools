@@ -388,7 +388,7 @@ async function initAttackPlanner(groupId) {
     }
 
     const destinationVillage = Array.isArray(finalMatch) ? finalMatch[0] : finalMatch;
-    console.log("Erfolgreich das Ziel extrahiert:", destinationVillage);
+    console.log("Erfolgreich die Ziel extrahiert:", destinationVillage);
 
     villages = villages.map((item) => {
         const distance = calculateDistance(item.coords, destinationVillage);
@@ -741,16 +741,26 @@ function setAllUnits() {
 }
 
 // Prepare plans based on user input
+// Prepare plans based on user input
 function getPlans(landingTime, destinationVillage, villagesUnitsToSend) {
     let plans = [];
 
+    // FIX: Wir reinigen das Ziel auch hier, damit die Distanzberechnung stimmt!
+    const cleanDestMatch = destinationVillage.match(/\d{1,3}\|\d{1,3}/);
+    const cleanDestination = cleanDestMatch ? cleanDestMatch[0] : destinationVillage;
+
     // Prepare plans list
     villagesUnitsToSend.forEach((item) => {
-        const launchTime = getLaunchTime(item.unit, landingTime, item.distance);
+        // Wir berechnen die Distanz zwischen deinem Dorf (item.coords) und dem sauberen Ziel
+        const distance = calculateDistance(item.coords, cleanDestination);
+        
+        // Jetzt nutzen wir die korrekte Distanz für die Abschusszeit
+        const launchTime = getLaunchTime(item.unit, landingTime, distance);
+        
         const plan = {
-            destination: destinationVillage,
+            destination: cleanDestination,
             landingTime: landingTime,
-            distance: item.distance,
+            distance: distance,
             unit: item.unit,
             highPrio: item.highPrio,
             villageId: item.id,
@@ -761,19 +771,12 @@ function getPlans(landingTime, destinationVillage, villagesUnitsToSend) {
         plans.push(plan);
     });
 
-    // Sort times array by nearest launch time
-    plans.sort((a, b) => {
-        return a.launchTime - b.launchTime;
-    });
+    // Rest der Funktion bleibt gleich (Sortieren und Filtern)
+    plans.sort((a, b) => a.launchTime - b.launchTime);
 
-    console.debug('plans', plans);
-
-    // Filter only valid launch times
     const filteredPlans = plans.filter((item) => {
         return item.launchTime >= getServerTime().getTime();
     });
-
-    console.debug('filteredPlans', filteredPlans);
 
     return filteredPlans;
 }
