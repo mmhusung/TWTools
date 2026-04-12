@@ -998,7 +998,7 @@ function renderVillagesTable(villages) {
     `;
 
         // Styling für die Input-Felder, damit sie in die Tabelle passen
-        const inputStyle = `style="width: 40px; background-color: #fffbee; border: 1px solid #7d510f; border-radius: 3px; text-align: center;"`;
+        const inputStyle = `style="width: 55px; background-color: #fffbee; border: 1px solid #7d510f; border-radius: 3px; text-align: center;"`;
 
         const villageCombinations = [];
         villages.forEach((village) => {
