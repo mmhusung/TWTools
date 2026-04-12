@@ -614,13 +614,11 @@ function calculateLaunchTimes() {
 
         const landingTimeString = jQuery('#raLandingTime').val().trim();
         
-        // FIX: Wir lesen nicht mehr aus einer speziellen Tabellenzelle (td:eq(2)).
-        // Wir ziehen uns die Koordinate sicher per Regex aus dem gesamten Content.
+        // Sicherstellen, dass wir die Ziel-Koordinaten haben (Shark-proof Fix)
         const pageContent = jQuery('#content_value').text();
         const coordMatch = pageContent.match(/\d{1,3}\|\d{1,3}/);
         const destinationVillage = coordMatch ? coordMatch[0] : "";
 
-        // Falls wirklich gar nichts gefunden wird, stoppen wir hier
         if (destinationVillage === "") {
             UI.ErrorMessage(tt('Target coordinates could not be found!'));
             return;
@@ -628,25 +626,35 @@ function calculateLaunchTimes() {
 
         let villagesUnitsToSend = [];
 
-        // collect user input
+        // Wir gehen durch jede Zeile, in der eine Einheit (rotes Viereck) ausgewählt wurde
         jQuery('#raAttackPlannerTable .ra-selected-unit').each(function () {
-            const id = parseInt(jQuery(this).attr('data-village-id'));
-            const unit = jQuery(this).attr('data-unit-type');
-            const coords = jQuery(this).attr('data-village-coords');
-            const isPrioVillage = jQuery(this)
-                .parent()
-                .parent()
-                .find('td .ra-priority-village')[0]
-                ? true
-                : false;
+            const $selectedImg = jQuery(this);
+            const $row = $selectedImg.closest('tr'); // Wir holen uns die ganze Zeile
+            
+            const id = parseInt($selectedImg.attr('data-village-id'));
+            const slowUnit = $selectedImg.attr('data-unit-type'); // Die Einheit für die Laufzeit
+            const coords = $selectedImg.attr('data-village-coords');
+            const isPrioVillage = $row.find('td .ra-priority-village')[0] ? true : false;
 
-            // Hier wird jetzt mit der sauberen Koordinate gerechnet
+            // NEU: Alle Truppen-Inputs dieser Zeile auslesen
+            let rowUnits = {};
+            $row.find('input.ra-unit-count').each(function() {
+                const uType = jQuery(this).attr('data-unit-type');
+                // Wir nutzen .val() statt .text(), um den aktuell eingetippten Wert zu holen
+                const count = parseInt(jQuery(this).val()) || 0;
+                
+                if (count > 0) {
+                    rowUnits[uType] = count;
+                }
+            });
+
             const distance = calculateDistance(coords, destinationVillage);
 
             villagesUnitsToSend.push({
                 id: id,
-                unit: unit,
+                unit: slowUnit,       // Bestimmt die Geschwindigkeit
                 coords: coords,
+                units: rowUnits,      // Enthält die exakten Zahlen für den BB-Code Link
                 highPrio: isPrioVillage,
                 distance: distance,
             });
@@ -657,7 +665,7 @@ function calculateLaunchTimes() {
             
             const landingTime = getLandingTime(landingTimeString);
             
-            // Wir übergeben das saubere destinationVillage an getPlans
+            // Übergabe der Daten (inklusive der neuen 'units' Liste)
             const plans = getPlans(
                 landingTime,
                 destinationVillage,
@@ -665,7 +673,7 @@ function calculateLaunchTimes() {
             );
 
             if (plans.length > 0) {
-                // Auch für den Export nutzen wir die saubere Koordinate
+                // getBBCodePlans nutzt jetzt die 'units' in den Objekten für die Links
                 const planBBCode = getBBCodePlans(plans, destinationVillage);
                 const plansCode = getCodePlans(plans, destinationVillage);
                 
@@ -757,20 +765,13 @@ function setAllUnits() {
 }
 
 // Prepare plans based on user input
-// Prepare plans based on user input
 function getPlans(landingTime, destinationVillage, villagesUnitsToSend) {
     let plans = [];
-
-    // FIX: Wir reinigen das Ziel auch hier, damit die Distanzberechnung stimmt!
     const cleanDestMatch = destinationVillage.match(/\d{1,3}\|\d{1,3}/);
     const cleanDestination = cleanDestMatch ? cleanDestMatch[0] : destinationVillage;
 
-    // Prepare plans list
     villagesUnitsToSend.forEach((item) => {
-        // Wir berechnen die Distanz zwischen deinem Dorf (item.coords) und dem sauberen Ziel
         const distance = calculateDistance(item.coords, cleanDestination);
-        
-        // Jetzt nutzen wir die korrekte Distanz für die Abschusszeit
         const launchTime = getLaunchTime(item.unit, landingTime, distance);
         
         const plan = {
@@ -778,6 +779,7 @@ function getPlans(landingTime, destinationVillage, villagesUnitsToSend) {
             landingTime: landingTime,
             distance: distance,
             unit: item.unit,
+            units: item.units, // NEU: Die Truppenanzahlen aus den Inputs mitnehmen
             highPrio: item.highPrio,
             villageId: item.id,
             launchTime: launchTime,
@@ -787,55 +789,41 @@ function getPlans(landingTime, destinationVillage, villagesUnitsToSend) {
         plans.push(plan);
     });
 
-    // Rest der Funktion bleibt gleich (Sortieren und Filtern)
     plans.sort((a, b) => a.launchTime - b.launchTime);
-
-    const filteredPlans = plans.filter((item) => {
-        return item.launchTime >= getServerTime().getTime();
-    });
-
-    return filteredPlans;
+    return plans.filter((item) => item.launchTime >= getServerTime().getTime());
 }
 
 // Export plan as BB Code
 function getBBCodePlans(plans, destinationVillage) {
     const landingTime = jQuery('#raLandingTime').val().trim();
-
-    // SICHERHEITS-CHECK: Wir suchen die Koordinaten zuerst im Argument, 
-    // und falls das leer ist (wie bei shark*), suchen wir auf der ganzen Seite.
     let cleanDestinationMatch = destinationVillage.match(/\d{1,3}\|\d{1,3}/);
     if (!cleanDestinationMatch) {
         cleanDestinationMatch = jQuery('#content_value').text().match(/\d{1,3}\|\d{1,3}/);
     }
-    
     const cleanDestination = cleanDestinationMatch ? cleanDestinationMatch[0] : "000|000";
 
-    let bbCode = `[size=12][b]${tt(
-        'Plan for:'
-    )}[/b] ${cleanDestination}\n[b]${tt(
-        'Landing Time:'
-    )}[/b] ${landingTime}[/size]\n\n`;
-    
-    bbCode += `[table][**]${tt('Unit')}[||]${tt('From')}[||]${tt(
-        'Priority'
-    )}[||]${tt('Launch Time')}[||]${tt('Command')}[||]${tt('Status')}[/**]\n`;
+    let bbCode = `[size=12][b]${tt('Plan for:')}[/b] ${cleanDestination}\n[b]${tt('Landing Time:')}[/b] ${landingTime}[/size]\n\n`;
+    bbCode += `[table][**]${tt('Unit')}[||]${tt('From')}[||]${tt('Priority')}[||]${tt('Launch Time')}[||]${tt('Command')}[||]${tt('Status')}[/**]\n`;
 
     plans.forEach((plan) => {
-        const { unit, highPrio, coords, villageId, launchTimeFormatted } = plan;
-
-        // Splittet jetzt garantiert eine saubere Koordinate ohne "undefined"
+        const { unit, units, highPrio, coords, villageId, launchTimeFormatted } = plan;
         const [toX, toY] = cleanDestination.split('|');
 
-        const priority = highPrio ? tt('Early send') : '';
+        // NEU: Truppen-Parameter generieren
+        let unitParams = "";
+        if (units) {
+            Object.entries(units).forEach(([uType, uCount]) => {
+                unitParams += `&${uType}=${uCount}`;
+            });
+        }
 
-        let rallyPointData = game_data.market !== 'uk' ? `&x=${toX}&y=${toY}` : '';
+        const priority = highPrio ? tt('Early send') : '';
+        let rallyPointData = `&x=${toX}&y=${toY}${unitParams}`; // Truppen hier anhängen
         let sitterData = game_data.player.sitter > 0 ? `&t=${game_data.player.id}` : '';
 
-        let commandUrl = `/game.php?${sitterData}&village=${villageId}&screen=place${rallyPointData}`;
+        let commandUrl = `/game.php?village=${villageId}&screen=place${rallyPointData}${sitterData}`;
 
-        bbCode += `[*][unit]${unit}[/unit][|] ${coords} [|][b][color=#ff0000]${priority}[/color][/b][|]${launchTimeFormatted}[|][url=${
-            window.location.origin
-        }${commandUrl}]${tt('Send')}[/url][|]\n`;
+        bbCode += `[*][unit]${unit}[/unit][|] ${coords} [|][b][color=#ff0000]${priority}[/color][/b][|]${launchTimeFormatted}[|][url=${window.location.origin}${commandUrl}]${tt('Send')}[/url][|]\n`;
     });
 
     bbCode += `[/table]`;
@@ -845,36 +833,33 @@ function getBBCodePlans(plans, destinationVillage) {
 // Export plans without table
 function getCodePlans(plans, destinationVillage) {
     const landingTime = jQuery('#raLandingTime').val().trim();
-
-    // Gleicher Sicherheits-Check wie oben
     let cleanDestinationMatch = destinationVillage.match(/\d{1,3}\|\d{1,3}/);
     if (!cleanDestinationMatch) {
         cleanDestinationMatch = jQuery('#content_value').text().match(/\d{1,3}\|\d{1,3}/);
     }
-    
     const cleanDestination = cleanDestinationMatch ? cleanDestinationMatch[0] : "000|000";
 
-    let planCode = `[size=12][b]${tt(
-        'Plan for:'
-    )}[/b] ${cleanDestination}\n[b]${tt(
-        'Landing Time:'
-    )}[/b] ${landingTime}[/size]\n\n`;
+    let planCode = `[size=12][b]${tt('Plan for:')}[/b] ${cleanDestination}\n[b]${tt('Landing Time:')}[/b] ${landingTime}[/size]\n\n`;
 
     plans.forEach((plan) => {
-        const { unit, highPrio, coords, villageId, launchTimeFormatted } = plan;
-
+        const { unit, units, highPrio, coords, villageId, launchTimeFormatted } = plan;
         const [toX, toY] = cleanDestination.split('|');
 
-        const priority = highPrio ? tt('Early send') : '';
+        // NEU: Truppen-Parameter generieren
+        let unitParams = "";
+        if (units) {
+            Object.entries(units).forEach(([uType, uCount]) => {
+                unitParams += `&${uType}=${uCount}`;
+            });
+        }
 
-        let rallyPointData = game_data.market !== 'uk' ? `&x=${toX}&y=${toY}` : '';
+        const priority = highPrio ? tt('Early send') : '';
+        let rallyPointData = `&x=${toX}&y=${toY}${unitParams}`;
         let sitterData = game_data.player.sitter > 0 ? `&t=${game_data.player.id}` : '';
 
-        let commandUrl = `/game.php?${sitterData}&village=${villageId}&screen=place${rallyPointData}`;
+        let commandUrl = `/game.php?village=${villageId}&screen=place${rallyPointData}${sitterData}`;
 
-        planCode += `[unit]${unit}[/unit] ${coords} [b][color=#ff0000]${priority}[/color][/b]${launchTimeFormatted}[url=${
-            window.location.origin
-        }${commandUrl}]${tt('Send')}[/url]\n`;
+        planCode += `[unit]${unit}[/unit] ${coords} [b][color=#ff0000]${priority}[/color][/b] ${launchTimeFormatted} [url=${window.location.origin}${commandUrl}]${tt('Send')}[/url]\n`;
     });
 
     return planCode;
@@ -979,63 +964,41 @@ function getLandingTime(landingTime) {
     return landingTimeObject;
 }
 
-// Helper: Render own villages table
+// Helper: Render own villages table with editable input fields
 function renderVillagesTable(villages) {
     if (villages.length) {
-       
         let villagesTable = `
-		<table id="raAttackPlannerTable" class="ra-table" width="100%">
-			<thead>
-				<tr>
-					<th class="ra-text-left" width="25%">
-						${tt('Village')} (${villages.length})
-					</th>
-					<th class="5%">
-						${tt('Dist.')}
-					</th>
-					<th width="5%">
-						${tt('Prio.')}
-					</th>
-					<th class="ra-unit-toggle">
-						<img src="/graphic/unit/unit_spear.webp" data-set-unit="spear">
-					</th>
-					<th class="ra-unit-toggle">
-						<img src="/graphic/unit/unit_sword.webp" data-set-unit="sword">
-					</th>
-					<th class="ra-unit-toggle">
-						<img src="/graphic/unit/unit_axe.webp" data-set-unit="axe">
-					</th>
-					<th class="archer-world ra-unit-toggle">
-						<img src="/graphic/unit/unit_archer.webp" data-set-unit="archer">
-					</th>
-					<th class="ra-unit-toggle">
-						<img src="/graphic/unit/unit_spy.webp" data-set-unit="spy">
-					</th>
-					<th class="ra-unit-toggle">
-						<img src="/graphic/unit/unit_light.webp" data-set-unit="light">
-					</th>
-					<th class="archer-world ra-unit-toggle">
-						<img src="/graphic/unit/unit_marcher.webp" data-set-unit="marcher">
-					</th>
-					<th class="ra-unit-toggle">
-						<img src="/graphic/unit/unit_heavy.webp" data-set-unit="heavy">
-					</th>
-					<th class="ra-unit-toggle">
-						<img src="/graphic/unit/unit_ram.webp" data-set-unit="ram">
-					</th>
-					<th class="ra-unit-toggle">
-						<img src="/graphic/unit/unit_catapult.webp" data-set-unit="catapult">
-					</th>
-					<th class="paladin-world ra-unit-toggle">
-						<img src="/graphic/unit/unit_knight.webp" data-set-unit="knight">
-					</th>
-					<th class="ra-unit-toggle">
-						<img src="/graphic/unit/unit_snob.webp" data-set-unit="snob">
-					</th>
-				</tr>
-			</thead>
-			<tbody>
-	`;
+        <table id="raAttackPlannerTable" class="ra-table" width="100%">
+            <thead>
+                <tr>
+                    <th class="ra-text-left" width="25%">
+                        ${tt('Village')} (${villages.length})
+                    </th>
+                    <th width="5%">
+                        ${tt('Dist.')}
+                    </th>
+                    <th width="5%">
+                        ${tt('Prio.')}
+                    </th>
+                    <th class="ra-unit-toggle"><img src="/graphic/unit/unit_spear.webp" data-set-unit="spear"></th>
+                    <th class="ra-unit-toggle"><img src="/graphic/unit/unit_sword.webp" data-set-unit="sword"></th>
+                    <th class="ra-unit-toggle"><img src="/graphic/unit/unit_axe.webp" data-set-unit="axe"></th>
+                    <th class="archer-world ra-unit-toggle"><img src="/graphic/unit/unit_archer.webp" data-set-unit="archer"></th>
+                    <th class="ra-unit-toggle"><img src="/graphic/unit/unit_spy.webp" data-set-unit="spy"></th>
+                    <th class="ra-unit-toggle"><img src="/graphic/unit/unit_light.webp" data-set-unit="light"></th>
+                    <th class="archer-world ra-unit-toggle"><img src="/graphic/unit/unit_marcher.webp" data-set-unit="marcher"></th>
+                    <th class="ra-unit-toggle"><img src="/graphic/unit/unit_heavy.webp" data-set-unit="heavy"></th>
+                    <th class="ra-unit-toggle"><img src="/graphic/unit/unit_ram.webp" data-set-unit="ram"></th>
+                    <th class="ra-unit-toggle"><img src="/graphic/unit/unit_catapult.webp" data-set-unit="catapult"></th>
+                    <th class="paladin-world ra-unit-toggle"><img src="/graphic/unit/unit_knight.webp" data-set-unit="knight"></th>
+                    <th class="ra-unit-toggle"><img src="/graphic/unit/unit_snob.webp" data-set-unit="snob"></th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+        // Styling für die Input-Felder, damit sie in die Tabelle passen
+        const inputStyle = `style="width: 40px; background-color: #fffbee; border: 1px solid #7d510f; border-radius: 3px; text-align: center;"`;
 
         const villageCombinations = [];
         villages.forEach((village) => {
@@ -1051,97 +1014,76 @@ function renderVillagesTable(villages) {
 
         villageCombinations.forEach((village) => {
             const {
-                name,
-                coords,
-                id,
-                spear,
-                sword,
-                axe,
-                archer,
-                spy,
-                light,
-                marcher,
-                heavy,
-                ram,
-                catapult,
-                knight,
-                snob,
-                distance,
+                name, coords, id, distance,
+                spear, sword, axe, archer, spy, light, marcher, heavy, ram, catapult, knight, snob
             } = village;
 
             const continent = getContinentByCoord(coords);
             const link = game_data.link_base_pure + `info_village&id=${id}`;
 
             villagesTable += `
-			<tr>
-				<td class="ra-text-left" width="25%">
-					<a href="${link}" target="_blank" rel="noopener noreferrer">
-						${name} (${coords}) K${continent}
-					</a>
-				</td>
-				<td width="5%">
-					${distance}
-				</td>
-				<td width="5%">
-					<span class="icon header favorite_add"></span>
-				</td>
-				<td>
-					<img data-unit-type="spear" data-village-id="${id}" data-village-coords="${coords}" src="/graphic/unit/unit_spear.webp">
-					<span>${formatAsNumber(spear)}</span>
-				</td>
-				<td>
-					<img data-unit-type="sword" data-village-id="${id}" data-village-coords="${coords}" src="/graphic/unit/unit_sword.webp">
-					<span>${formatAsNumber(sword)}</span>
-				</td>
-				<td>
-					<img data-unit-type="axe" data-village-id="${id}" data-village-coords="${coords}" src="/graphic/unit/unit_axe.webp">
-					<span>${formatAsNumber(axe)}</span>
-				</td>
-				<td class="archer-world">
-					<img data-unit-type="archer" data-village-id="${id}" data-village-coords="${coords}" src="/graphic/unit/unit_archer.webp">
-					<span>${formatAsNumber(archer)}</span>
-				</td>
-				<td>
-					<img data-unit-type="spy" data-village-id="${id}" data-village-coords="${coords}" src="/graphic/unit/unit_spy.webp">
-					<span>${formatAsNumber(spy)}</span>
-				</td>
-				<td>
-					<img data-unit-type="light" data-village-id="${id}" data-village-coords="${coords}" src="/graphic/unit/unit_light.webp">
-					<span>${formatAsNumber(light)}</span>
-				</td>
-				<td class="archer-world">
-					<img data-unit-type="marcher" data-village-id="${id}" data-village-coords="${coords}" src="/graphic/unit/unit_marcher.webp">
-					<span>${formatAsNumber(marcher)}</span>
-				</td>
-				<td>
-					<img data-unit-type="heavy" data-village-id="${id}" data-village-coords="${coords}" src="/graphic/unit/unit_heavy.webp">
-					<span>${formatAsNumber(heavy)}</span>
-				</td>
-				<td>
-					<img data-unit-type="ram" data-village-id="${id}" data-village-coords="${coords}" src="/graphic/unit/unit_ram.webp">
-					<span>${formatAsNumber(ram)}</span>
-				</td>
-				<td>
-					<img data-unit-type="catapult" data-village-id="${id}" data-village-coords="${coords}" src="/graphic/unit/unit_catapult.webp">
-					<span>${formatAsNumber(catapult)}</span>
-				</td>
-				<td class="paladin-world">
-					<img data-unit-type="knight" data-village-id="${id}" data-village-coords="${coords}" src="/graphic/unit/unit_knight.webp">
-					<span>${formatAsNumber(knight)}</span>
-				</td>
-				<td>
-					<img data-unit-type="snob" data-village-id="${id}" data-village-coords="${coords}" src="/graphic/unit/unit_snob.webp">
-					<span>${formatAsNumber(snob)}</span>
-				</td>
-			</tr>
-		`;
+            <tr>
+                <td class="ra-text-left">
+                    <a href="${link}" target="_blank" rel="noopener noreferrer">
+                        ${name} (${coords}) K${continent}
+                    </a>
+                </td>
+                <td>${distance}</td>
+                <td><span class="icon header favorite_add ra-priority-village"></span></td>
+                
+                <td>
+                    <img class="ra-unit-icon" data-unit-type="spear" data-village-id="${id}" data-village-coords="${coords}" src="/graphic/unit/unit_spear.webp">
+                    <input type="number" class="ra-unit-count" data-unit-type="spear" value="${spear}" ${inputStyle}>
+                </td>
+                <td>
+                    <img class="ra-unit-icon" data-unit-type="sword" data-village-id="${id}" data-village-coords="${coords}" src="/graphic/unit/unit_sword.webp">
+                    <input type="number" class="ra-unit-count" data-unit-type="sword" value="${sword}" ${inputStyle}>
+                </td>
+                <td>
+                    <img class="ra-unit-icon" data-unit-type="axe" data-village-id="${id}" data-village-coords="${coords}" src="/graphic/unit/unit_axe.webp">
+                    <input type="number" class="ra-unit-count" data-unit-type="axe" value="${axe}" ${inputStyle}>
+                </td>
+                <td class="archer-world">
+                    <img class="ra-unit-icon" data-unit-type="archer" data-village-id="${id}" data-village-coords="${coords}" src="/graphic/unit/unit_archer.webp">
+                    <input type="number" class="ra-unit-count" data-unit-type="archer" value="${archer}" ${inputStyle}>
+                </td>
+                <td>
+                    <img class="ra-unit-icon" data-unit-type="spy" data-village-id="${id}" data-village-coords="${coords}" src="/graphic/unit/unit_spy.webp">
+                    <input type="number" class="ra-unit-count" data-unit-type="spy" value="${spy}" ${inputStyle}>
+                </td>
+                <td>
+                    <img class="ra-unit-icon" data-unit-type="light" data-village-id="${id}" data-village-coords="${coords}" src="/graphic/unit/unit_light.webp">
+                    <input type="number" class="ra-unit-count" data-unit-type="light" value="${light}" ${inputStyle}>
+                </td>
+                <td class="archer-world">
+                    <img class="ra-unit-icon" data-unit-type="marcher" data-village-id="${id}" data-village-coords="${coords}" src="/graphic/unit/unit_marcher.webp">
+                    <input type="number" class="ra-unit-count" data-unit-type="marcher" value="${marcher}" ${inputStyle}>
+                </td>
+                <td>
+                    <img class="ra-unit-icon" data-unit-type="heavy" data-village-id="${id}" data-village-coords="${coords}" src="/graphic/unit/unit_heavy.webp">
+                    <input type="number" class="ra-unit-count" data-unit-type="heavy" value="${heavy}" ${inputStyle}>
+                </td>
+                <td>
+                    <img class="ra-unit-icon" data-unit-type="ram" data-village-id="${id}" data-village-coords="${coords}" src="/graphic/unit/unit_ram.webp">
+                    <input type="number" class="ra-unit-count" data-unit-type="ram" value="${ram}" ${inputStyle}>
+                </td>
+                <td>
+                    <img class="ra-unit-icon" data-unit-type="catapult" data-village-id="${id}" data-village-coords="${coords}" src="/graphic/unit/unit_catapult.webp">
+                    <input type="number" class="ra-unit-count" data-unit-type="catapult" value="${catapult}" ${inputStyle}>
+                </td>
+                <td class="paladin-world">
+                    <img class="ra-unit-icon" data-unit-type="knight" data-village-id="${id}" data-village-coords="${coords}" src="/graphic/unit/unit_knight.webp">
+                    <input type="number" class="ra-unit-count" data-unit-type="knight" value="${knight}" ${inputStyle}>
+                </td>
+                <td>
+                    <img class="ra-unit-icon" data-unit-type="snob" data-village-id="${id}" data-village-coords="${coords}" src="/graphic/unit/unit_snob.webp">
+                    <input type="number" class="ra-unit-count" data-unit-type="snob" value="${snob}" ${inputStyle}>
+                </td>
+            </tr>
+        `;
         });
 
-        villagesTable += `
-			</tbody>
-		</table>
-	`;
-
+        villagesTable += `</tbody></table>`;
         return villagesTable;
     } else {
         return `<p><b>${tt('Villages list could not be fetched!')}</b><br></p>`;
