@@ -1,7 +1,7 @@
 javascript:(function () {
     const DEFAULT = {
         light: 5,
-        march: 0, // Skav
+        march: 0,
         spy: 1,
         radius: 20
     };
@@ -15,7 +15,6 @@ javascript:(function () {
                 <span onclick="$('#bb_master_ui').remove()" style="cursor:pointer; font-weight:bold; padding:0 4px;">[X]</span>
             </div>
 
-            <!-- Ladefortschritt (Kartendaten) -->
             <div id="bb_load_progress_wrap" style="margin-bottom:8px;">
                 <div style="background:#c2b18c; border:1px solid #7d510f; height:18px; border-radius:3px; overflow:hidden; position:relative;">
                     <div id="bb_load_progress_bar" style="background:#28a745; width:0%; height:100%; transition:width 0.25s ease;"></div>
@@ -23,7 +22,6 @@ javascript:(function () {
                 </div>
             </div>
 
-            <!-- Angriffsfortschritt (gesendet / offen) -->
             <div id="bb_attack_progress_wrap" style="margin-bottom:8px; display:none;">
                 <div style="background:#c2b18c; border:1px solid #7d510f; height:20px; border-radius:3px; overflow:hidden; position:relative;">
                     <div id="bb_attack_progress_bar" style="background:#28a745; width:0%; height:100%; transition:width 0.25s ease;"></div>
@@ -58,7 +56,6 @@ javascript:(function () {
                 </table>
             </div>
 
-            <!-- Inline Versammlungsplatz -->
             <div id="bb_frame_container" style="display:none; margin-top:8px; border-top:1px solid #7d510f; padding-top:6px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                     <span id="bb_frame_title" style="font-size:11px; font-weight:bold;">Versammlungsplatz</span>
@@ -70,7 +67,6 @@ javascript:(function () {
     `;
     $('body').append(ui);
 
-    // Fenster verschiebbar machen
     let isDragging = false, offset = [0, 0];
     const box = document.getElementById("bb_master_ui");
     document.getElementById("bb_header").onmousedown = (e) => {
@@ -107,11 +103,9 @@ javascript:(function () {
         $("#bb_attack_progress_text").text(`${openedIds.size} / ${totalToFarm} Angriffe gesendet (noch ${open} offen)`);
     }
 
-    // Enter abfangen: gedrückt halten treibt die gesamte Farm-Sequenz an
     window.addEventListener("keydown", (e) => {
         if (e.key !== "Enter") return;
 
-        // Tippt der Nutzer gerade in ein Feld auf der Hauptseite (z.B. Radius), nicht eingreifen
         const active = document.activeElement;
         const isTypingOnMainPage = active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA") && active.ownerDocument === document;
         if (isTypingOnMainPage) return;
@@ -125,25 +119,15 @@ javascript:(function () {
             return;
         }
 
-        try {
-            const doc = frame.contentDocument || frame.contentWindow.document;
-            const confirmBtn = doc.getElementById("troop_confirm_submit");
-            const attackBtn = doc.getElementById("target_attack");
+        if (frame._bb_stage === "attack") {
+            enterLocked = true;
+            frame._bb_stage = "confirm";
+            frame.src = `/game.php?village=${game_data.village.id}&screen=place&try=confirm`;
+        }
 
-            if (confirmBtn) {
-                enterLocked = true;
-                confirmBtn.click();
-            } else if (attackBtn) {
-                enterLocked = true;
-                attackBtn.click();
-            }
-        } catch (err) {}
-
-        // Sicherheitsnetz, falls onload aus irgendeinem Grund nicht feuert
         if (enterLocked) setTimeout(() => { enterLocked = false; }, 4000);
     });
 
-    // 1. Kartendaten laden
     setLoadProgress(25, "Lade /map/village.txt...");
     $.get("/map/village.txt", function (data) {
         setLoadProgress(60, "Filtere Barbarendörfer...");
@@ -208,14 +192,12 @@ javascript:(function () {
             `);
         });
 
-        // Solange die Farm-Runde noch nicht gestartet wurde, Angriffsbalken zurücksetzen
         if (!farmingStarted) {
             totalToFarm = 0;
             $("#bb_attack_progress_wrap").hide();
         }
     }
 
-    // Startet die automatische Sequenz beim ersten noch offenen Ziel
     window.startFarming = function () {
         const rows = $(".farm-row").filter(function () {
             return !openedIds.has($(this).data("village-id").toString());
@@ -235,51 +217,38 @@ javascript:(function () {
         farmInline(first.data("village-id"), first.find("td:eq(0)").text());
     };
 
-    // Inline-Farm-Logik
     window.farmInline = function (targetId, coords) {
         currentFarmTarget = targetId;
         const frame = document.getElementById("bb_farm_frame");
         $("#bb_frame_title").text(`Angriff auf ${coords} (Enter drücken/halten)`);
         $("#bb_frame_container").show();
 
-        const url = `/game.php?village=${game_data.village.id}&screen=place&target=${targetId}#bb_run`;
-        frame.src = url;
+        const attackUrl = `/game.php?village=${game_data.village.id}&screen=place`
+            + `&target=${targetId}`
+            + `&light=${$("#cfg_light").val() || 0}`
+            + `&march=${$("#cfg_march").val() || 0}`
+            + `&spy=${$("#cfg_spy").val() || 0}`;
+
+        frame._bb_stage = "attack";
+        frame.src = attackUrl;
 
         frame.onload = function () {
             try {
                 const doc = frame.contentDocument || frame.contentWindow.document;
 
-                // Fall 1: Bestätigungsseite erreicht -> Bestätigen fokussieren
-                const confirmBtn = doc.getElementById("troop_confirm_submit");
-                if (confirmBtn) {
-                    frame.contentWindow.focus();
-                    confirmBtn.focus();
-                    enterLocked = false;
-                    return;
-                }
-
-                // Fall 2: Fehler (z.B. keine Truppen) -> anzeigen lassen, nicht weiterspringen
                 if (doc.querySelector(".error_box")) {
+                    frame._bb_stage = "error";
                     enterLocked = false;
                     return;
                 }
 
-                // Fall 3: Eingabeseite -> Einheiten eintragen
-                const lightInput = doc.getElementById("unit_input_light");
-                const heavyInput = doc.getElementById("unit_input_heavy");
-                const spyInput = doc.getElementById("unit_input_spy");
-                const attackBtn = doc.getElementById("target_attack");
-
-                if (attackBtn) {
-                    if (lightInput) lightInput.value = $("#cfg_light").val() || 0;
-                    if (heavyInput) heavyInput.value = $("#cfg_march").val() || 0;
-                    if (spyInput) spyInput.value = $("#cfg_spy").val() || 0;
-
+                if (frame._bb_stage === "attack") {
                     frame.contentWindow.focus();
-                    attackBtn.focus();
                     enterLocked = false;
-                } else if (currentFarmTarget) {
-                    // Weder Bestätigen noch Angreifen vorhanden -> Angriff war durch
+                    return;
+                }
+
+                if (frame._bb_stage === "confirm" && currentFarmTarget) {
                     markDone(currentFarmTarget);
                     enterLocked = false;
                     farmNext();
@@ -298,7 +267,6 @@ javascript:(function () {
         updateAttackProgress();
     };
 
-    // Nach erfolgreichem Angriff automatisch das nächste noch offene BB laden
     function farmNext() {
         const nextRow = $(".farm-row").filter(function () {
             const vId = $(this).data("village-id").toString();
