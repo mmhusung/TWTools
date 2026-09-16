@@ -1,11 +1,13 @@
 (function () {
     const DEFAULT = {
         spear: 0,
-        light: 5,
+        light: 0,
         march: 0,
         spy: 1,
         radius: 20
     };
+
+    const SETTLE_MS = 400;
 
     if ($("#bb_master_ui").length) $("#bb_master_ui").remove();
 
@@ -96,7 +98,6 @@
     let currentFarmTarget = null;
     let totalToFarm = 0;
     let farmingStarted = false;
-    let enterLocked = false;
 
     function updateAttackProgress() {
         const pct = totalToFarm > 0 ? Math.round((openedIds.size / totalToFarm) * 100) : 0;
@@ -113,7 +114,6 @@
         if (isTypingOnMainPage) return;
 
         e.preventDefault();
-        if (enterLocked) return;
 
         const frame = document.getElementById("bb_farm_frame");
         if (!frame || $("#bb_frame_container").is(":hidden")) {
@@ -122,12 +122,9 @@
         }
 
         if (frame._bb_stage === "attack") {
-            enterLocked = true;
-            frame._bb_stage = "confirm";
+            frame._bb_stage = "confirming";
             frame.src = `/game.php?village=${game_data.village.id}&screen=place&try=confirm`;
         }
-
-        if (enterLocked) setTimeout(() => { enterLocked = false; }, 4000);
     });
 
     setLoadProgress(25, "Lade /map/village.txt...");
@@ -232,32 +229,30 @@
             + `&march=${$("#cfg_march").val() || 0}`
             + `&spy=${$("#cfg_spy").val() || 0}`;
 
-        frame._bb_stage = "attack";
+        frame._bb_stage = "loading";
         frame.src = attackUrl;
 
         frame.onload = function () {
             try {
                 const doc = frame.contentDocument || frame.contentWindow.document;
 
-                if (frame._bb_stage === "attack") {
-                    const hasRealError = $(doc).find(".error_box:visible").filter(function () {
-                        return $(this).text().trim().length > 0;
-                    }).length > 0;
-
-                    if (hasRealError) frame._bb_stage = "error";
-
-                    enterLocked = false;
+                if (frame._bb_stage === "loading") {
+                    setTimeout(() => {
+                        const hasRealError = $(doc).find(".error_box:visible").filter(function () {
+                            return $(this).text().trim().length > 0;
+                        }).length > 0;
+                        frame._bb_stage = hasRealError ? "error" : "attack";
+                    }, SETTLE_MS);
                     return;
                 }
 
-                if (frame._bb_stage === "confirm" && currentFarmTarget) {
+                if (frame._bb_stage === "confirming" && currentFarmTarget) {
                     markDone(currentFarmTarget);
-                    enterLocked = false;
-                    farmNext();
+                    setTimeout(() => {
+                        farmNext();
+                    }, SETTLE_MS);
                 }
-            } catch (e) {
-                enterLocked = false;
-            }
+            } catch (e) {}
         };
     };
 
@@ -277,10 +272,8 @@
 
         if (nextRow.length) {
             const nextId = nextRow.data("village-id");
-            setTimeout(() => {
-                const btn = document.getElementById("btn_farm_" + nextId);
-                if (btn) btn.click();
-            }, 500);
+            const btn = document.getElementById("btn_farm_" + nextId);
+            if (btn) btn.click();
         } else {
             $("#bb_frame_title").text("Alle BBs abgearbeitet!");
             updateAttackProgress();
