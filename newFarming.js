@@ -42,7 +42,7 @@
 
             <div id="bb_status" style="margin-bottom:5px; font-size:11px; font-weight:bold;">Lese Kartendaten ein...</div>
 
-            <button id="bb_start_farm_btn" class="btn" onclick="startFarming()" style="margin-bottom:6px; font-weight:bold; width:100%; padding:4px;">▶ Start (danach: Enter = Versammlungsplatz / Enter = Angreifen)</button>
+            <button id="bb_start_farm_btn" class="btn" onclick="startFarming()" style="margin-bottom:6px; font-weight:bold; width:100%; padding:4px;">▶ Start (danach nur noch Enter)</button>
 
             <div id="bb_list_container" style="max-height:220px; overflow-y:auto; border:1px solid #7d510f; background:#fff5da;">
                 <table class="vis" width="100%">
@@ -104,15 +104,8 @@
         $("#bb_attack_progress_text").text(`${openedIds.size} / ${totalToFarm} Angriffe gesendet (noch ${open} offen)`);
     }
 
-    window.addEventListener("keydown", (e) => {
-        if (e.key !== "Enter") return;
-
-        const active = document.activeElement;
-        const isTypingOnMainPage = active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA") && active.ownerDocument === document;
-        if (isTypingOnMainPage) return;
-
-        e.preventDefault();
-
+    // ---- FIX: gemeinsame Enter-Logik, aufrufbar von Haupt-Dokument UND iFrame-Dokument ----
+    function handleEnterAction() {
         const frame = document.getElementById("bb_farm_frame");
         if (!frame || $("#bb_frame_container").is(":hidden")) {
             startFarming();
@@ -129,7 +122,33 @@
             loadNextTarget();
             return;
         }
+    }
+
+    window.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+
+        const active = document.activeElement;
+        const isTypingOnMainPage = active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA") && active.ownerDocument === document;
+        if (isTypingOnMainPage) return;
+
+        e.preventDefault();
+        handleEnterAction();
     });
+
+    // ---- FIX: Listener direkt im iFrame-Dokument binden, damit Enter auch greift,
+    // wenn die TW-Seite selbst den Fokus (z.B. auf ein Eingabefeld) gestohlen hat.
+    // Capture-Phase (true), damit wir vor evtl. eigenen TW-Skripten feuern.
+    function bindFrameKeydown(frame) {
+        try {
+            const fdoc = frame.contentDocument || frame.contentWindow.document;
+            fdoc.addEventListener("keydown", function (e) {
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                e.stopPropagation();
+                handleEnterAction();
+            }, true);
+        } catch (e) {}
+    }
 
     setLoadProgress(25, "Lade /map/village.txt...");
     $.get("/map/village.txt", function (data) {
@@ -251,6 +270,7 @@
                     $("#bb_status").text(hasRealError
                         ? `Fehler bei ${coords} - siehe Versammlungsplatz unten.`
                         : `${coords} bereit - Enter drücken zum Angreifen.`);
+                    bindFrameKeydown(frame); // FIX: Enter auch im iFrame abfangen
                     return;
                 }
 
@@ -259,6 +279,7 @@
                     frame._bb_stage = "readyNext";
                     $("#bb_frame_title").text("Enter = nächstes Ziel öffnen");
                     $("#bb_status").text(`${coords} angegriffen - Enter für nächstes Ziel.`);
+                    bindFrameKeydown(frame); // FIX: Enter auch im iFrame abfangen
                     reclaimFocus();
                 }
             } catch (e) {}
