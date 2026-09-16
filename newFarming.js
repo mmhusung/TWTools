@@ -3,7 +3,7 @@
         spear: 0,
         light: 0,
         march: 0,
-        spy: 1,
+        spy: 0,
         radius: 20
     };
 
@@ -42,7 +42,7 @@
 
             <div id="bb_status" style="margin-bottom:5px; font-size:11px; font-weight:bold;">Lese Kartendaten ein...</div>
 
-            <button id="bb_start_farm_btn" class="btn" onclick="startFarming()" style="margin-bottom:6px; font-weight:bold; width:100%; padding:4px;">▶ Start (danach nur noch Enter)</button>
+            <button id="bb_start_farm_btn" class="btn" onclick="startFarming()" style="margin-bottom:6px; font-weight:bold; width:100%; padding:4px;">▶ Alle farmen (danach Enter gedrückt halten)</button>
 
             <div id="bb_list_container" style="max-height:220px; overflow-y:auto; border:1px solid #7d510f; background:#fff5da;">
                 <table class="vis" width="100%">
@@ -96,32 +96,13 @@
     let currentFarmTarget = null;
     let totalToFarm = 0;
     let farmingStarted = false;
+    let enterLocked = false;
 
     function updateAttackProgress() {
         const pct = totalToFarm > 0 ? Math.round((openedIds.size / totalToFarm) * 100) : 0;
         const open = Math.max(totalToFarm - openedIds.size, 0);
         $("#bb_attack_progress_bar").css("width", pct + "%");
         $("#bb_attack_progress_text").text(`${openedIds.size} / ${totalToFarm} Angriffe gesendet (noch ${open} offen)`);
-    }
-
-    // ---- FIX: gemeinsame Enter-Logik, aufrufbar von Haupt-Dokument UND iFrame-Dokument ----
-    function handleEnterAction() {
-        const frame = document.getElementById("bb_farm_frame");
-        if (!frame || $("#bb_frame_container").is(":hidden")) {
-            startFarming();
-            return;
-        }
-
-        if (frame._bb_stage === "attack") {
-            frame._bb_stage = "confirming";
-            frame.src = `/game.php?village=${game_data.village.id}&screen=place&try=confirm`;
-            return;
-        }
-
-        if (frame._bb_stage === "readyNext") {
-            loadNextTarget();
-            return;
-        }
     }
 
     window.addEventListener("keydown", (e) => {
@@ -132,23 +113,22 @@
         if (isTypingOnMainPage) return;
 
         e.preventDefault();
-        handleEnterAction();
-    });
+        if (enterLocked) return;
 
-    // ---- FIX: Listener direkt im iFrame-Dokument binden, damit Enter auch greift,
-    // wenn die TW-Seite selbst den Fokus (z.B. auf ein Eingabefeld) gestohlen hat.
-    // Capture-Phase (true), damit wir vor evtl. eigenen TW-Skripten feuern.
-    function bindFrameKeydown(frame) {
-        try {
-            const fdoc = frame.contentDocument || frame.contentWindow.document;
-            fdoc.addEventListener("keydown", function (e) {
-                if (e.key !== "Enter") return;
-                e.preventDefault();
-                e.stopPropagation();
-                handleEnterAction();
-            }, true);
-        } catch (e) {}
-    }
+        const frame = document.getElementById("bb_farm_frame");
+        if (!frame || $("#bb_frame_container").is(":hidden")) {
+            startFarming();
+            return;
+        }
+
+        if (frame._bb_stage === "attack") {
+            enterLocked = true;
+            frame._bb_stage = "confirm";
+            frame.src = `/game.php?village=${game_data.village.id}&screen=place&try=confirm`;
+        }
+
+        if (enterLocked) setTimeout(() => { enterLocked = false; }, 4000);
+    });
 
     setLoadProgress(25, "Lade /map/village.txt...");
     $.get("/map/village.txt", function (data) {
@@ -242,8 +222,7 @@
     window.farmInline = function (targetId, coords) {
         currentFarmTarget = targetId;
         const frame = document.getElementById("bb_farm_frame");
-        $("#bb_frame_title").text(`Lade ${coords}...`);
-        $("#bb_status").text(`Öffne Versammlungsplatz für ${coords}...`);
+        $("#bb_frame_title").text(`Angriff auf ${coords} (Enter drücken/halten)`);
         $("#bb_frame_container").show();
 
         const attackUrl = `/game.php?village=${game_data.village.id}&screen=place`
@@ -253,45 +232,34 @@
             + `&march=${$("#cfg_march").val() || 0}`
             + `&spy=${$("#cfg_spy").val() || 0}`;
 
-        frame._bb_stage = "loading";
+        frame._bb_stage = "attack";
         frame.src = attackUrl;
 
         frame.onload = function () {
             try {
                 const doc = frame.contentDocument || frame.contentWindow.document;
 
-                if (frame._bb_stage === "loading") {
+                if (frame._bb_stage === "attack") {
                     const hasRealError = $(doc).find(".error_box:visible").filter(function () {
                         return $(this).text().trim().length > 0;
                     }).length > 0;
 
-                    frame._bb_stage = hasRealError ? "error" : "attack";
-                    $("#bb_frame_title").text(`${coords}: Enter = Angreifen`);
-                    $("#bb_status").text(hasRealError
-                        ? `Fehler bei ${coords} - siehe Versammlungsplatz unten.`
-                        : `${coords} bereit - Enter drücken zum Angreifen.`);
-                    bindFrameKeydown(frame); // FIX: Enter auch im iFrame abfangen
+                    if (hasRealError) frame._bb_stage = "error";
+
+                    enterLocked = false;
                     return;
                 }
 
-                if (frame._bb_stage === "confirming" && currentFarmTarget) {
+                if (frame._bb_stage === "confirm" && currentFarmTarget) {
                     markDone(currentFarmTarget);
-                    frame._bb_stage = "readyNext";
-                    $("#bb_frame_title").text("Enter = nächstes Ziel öffnen");
-                    $("#bb_status").text(`${coords} angegriffen - Enter für nächstes Ziel.`);
-                    bindFrameKeydown(frame); // FIX: Enter auch im iFrame abfangen
-                    reclaimFocus();
+                    enterLocked = false;
+                    farmNext();
                 }
-            } catch (e) {}
+            } catch (e) {
+                enterLocked = false;
+            }
         };
     };
-
-    function reclaimFocus() {
-        setTimeout(() => {
-            window.focus();
-            document.body.focus();
-        }, 50);
-    }
 
     window.markDone = function (id) {
         openedIds.add(id.toString());
@@ -301,22 +269,22 @@
         updateAttackProgress();
     };
 
-    function loadNextTarget() {
+    function farmNext() {
         const nextRow = $(".farm-row").filter(function () {
             const vId = $(this).data("village-id").toString();
             return !openedIds.has(vId);
         }).first();
 
-        if (!nextRow.length) {
+        if (nextRow.length) {
+            const nextId = nextRow.data("village-id");
+            const nextCoords = nextRow.find("td:eq(0)").text();
+            setTimeout(() => {
+                farmInline(nextId, nextCoords);
+            }, 300);
+        } else {
             $("#bb_frame_title").text("Alle BBs abgearbeitet!");
-            $("#bb_status").text("Alle BBs abgearbeitet!");
             updateAttackProgress();
-            return;
         }
-
-        const nextId = nextRow.data("village-id");
-        const nextCoords = nextRow.find("td:eq(0)").text();
-        farmInline(nextId, nextCoords);
     }
 
     $(document).on('change', '#cfg_radius', renderList);
