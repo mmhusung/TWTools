@@ -1,4 +1,4 @@
-javascript:(function () {
+(function () {
     const DEFAULT = {
         spear: 0,
         light: 5,
@@ -246,7 +246,6 @@ javascript:(function () {
                 }
 
                 if (frame._bb_stage === "attack") {
-                    frame.contentWindow.focus();
                     enterLocked = false;
                     return;
                 }
