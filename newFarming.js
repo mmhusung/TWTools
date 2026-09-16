@@ -1,7 +1,7 @@
 (function () {
     const DEFAULT = {
         spear: 0,
-        light: 0,
+        light: 5,
         march: 0,
         spy: 1,
         radius: 20
@@ -232,19 +232,19 @@
             + `&march=${$("#cfg_march").val() || 0}`
             + `&spy=${$("#cfg_spy").val() || 0}`;
 
-        frame._bb_stage = "attack";
+        frame._bb_stage = "loading";
         frame.src = attackUrl;
 
         frame.onload = function () {
             try {
                 const doc = frame.contentDocument || frame.contentWindow.document;
 
-                if (frame._bb_stage === "attack") {
+                if (frame._bb_stage === "loading") {
                     const hasRealError = $(doc).find(".error_box:visible").filter(function () {
                         return $(this).text().trim().length > 0;
                     }).length > 0;
 
-                    if (hasRealError) frame._bb_stage = "error";
+                    frame._bb_stage = hasRealError ? "error" : "attack";
 
                     enterLocked = false;
                     return;
@@ -277,9 +277,9 @@
 
         if (nextRow.length) {
             const nextId = nextRow.data("village-id");
-            const nextCoords = nextRow.find("td:eq(0)").text();
             setTimeout(() => {
-                farmInline(nextId, nextCoords);
+                const btn = document.getElementById("btn_farm_" + nextId);
+                if (btn) btn.click();
             }, 300);
         } else {
             $("#bb_frame_title").text("Alle BBs abgearbeitet!");
