@@ -1,7 +1,7 @@
 (function () {
     const DEFAULT = {
         spear: 0,
-        light: 5,
+        light: 0,
         march: 0,
         spy: 1,
         radius: 20
@@ -97,6 +97,8 @@
     let totalToFarm = 0;
     let farmingStarted = false;
     let enterLocked = false;
+    let loadToken = 0;
+    const SETTLE_DELAY_MS = 700;
 
     function updateAttackProgress() {
         const pct = totalToFarm > 0 ? Math.round((openedIds.size / totalToFarm) * 100) : 0;
@@ -233,20 +235,26 @@
             + `&spy=${$("#cfg_spy").val() || 0}`;
 
         frame._bb_stage = "loading";
+        loadToken++;
+        const myToken = loadToken;
         frame.src = attackUrl;
 
         frame.onload = function () {
             try {
-                const doc = frame.contentDocument || frame.contentWindow.document;
-
                 if (frame._bb_stage === "loading") {
-                    const hasRealError = $(doc).find(".error_box:visible").filter(function () {
-                        return $(this).text().trim().length > 0;
-                    }).length > 0;
-
-                    frame._bb_stage = hasRealError ? "error" : "attack";
-
-                    enterLocked = false;
+                    setTimeout(() => {
+                        if (myToken !== loadToken) return;
+                        try {
+                            const doc2 = frame.contentDocument || frame.contentWindow.document;
+                            const hasRealError = $(doc2).find(".error_box:visible").filter(function () {
+                                return $(this).text().trim().length > 0;
+                            }).length > 0;
+                            frame._bb_stage = hasRealError ? "error" : "attack";
+                        } catch (e) {
+                            frame._bb_stage = "attack";
+                        }
+                        enterLocked = false;
+                    }, SETTLE_DELAY_MS);
                     return;
                 }
 
