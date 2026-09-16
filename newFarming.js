@@ -1,13 +1,11 @@
 (function () {
     const DEFAULT = {
         spear: 0,
-        light: 0,
+        light: 5,
         march: 0,
         spy: 1,
         radius: 20
     };
-
-    const OPERATION_DELAY_MS = 1000;
 
     if ($("#bb_master_ui").length) $("#bb_master_ui").remove();
 
@@ -119,8 +117,6 @@
 
         const frame = document.getElementById("bb_farm_frame");
         if (!frame || $("#bb_frame_container").is(":hidden")) {
-            enterLocked = true;
-            setTimeout(() => { enterLocked = false; }, OPERATION_DELAY_MS);
             startFarming();
             return;
         }
@@ -129,8 +125,9 @@
             enterLocked = true;
             frame._bb_stage = "confirm";
             frame.src = `/game.php?village=${game_data.village.id}&screen=place&try=confirm`;
-            setTimeout(() => { enterLocked = false; }, OPERATION_DELAY_MS);
         }
+
+        if (enterLocked) setTimeout(() => { enterLocked = false; }, 4000);
     });
 
     setLoadProgress(25, "Lade /map/village.txt...");
@@ -248,14 +245,19 @@
                     }).length > 0;
 
                     if (hasRealError) frame._bb_stage = "error";
+
+                    enterLocked = false;
                     return;
                 }
 
                 if (frame._bb_stage === "confirm" && currentFarmTarget) {
                     markDone(currentFarmTarget);
+                    enterLocked = false;
                     farmNext();
                 }
-            } catch (e) {}
+            } catch (e) {
+                enterLocked = false;
+            }
         };
     };
 
@@ -275,8 +277,10 @@
 
         if (nextRow.length) {
             const nextId = nextRow.data("village-id");
-            const btn = document.getElementById("btn_farm_" + nextId);
-            if (btn) btn.click();
+            setTimeout(() => {
+                const btn = document.getElementById("btn_farm_" + nextId);
+                if (btn) btn.click();
+            }, 500);
         } else {
             $("#bb_frame_title").text("Alle BBs abgearbeitet!");
             updateAttackProgress();
