@@ -1,7 +1,7 @@
 (function () {
     const DEFAULT = {
         spear: 0,
-        light: 5,
+        light: 0,
         march: 0,
         spy: 1,
         radius: 20
