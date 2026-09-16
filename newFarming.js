@@ -1,5 +1,6 @@
 javascript:(function () {
     const DEFAULT = {
+        spear: 0,
         light: 5,
         march: 0,
         spy: 1,
@@ -31,6 +32,7 @@ javascript:(function () {
 
             <div style="background:#d2c09e; padding:6px; border-radius:3px; margin-bottom:8px; font-size:11px;">
                 <div style="display:flex; gap:10px; align-items:center; margin-bottom:5px;">
+                    <span>Speer: <input type="number" id="cfg_spear" value="${DEFAULT.spear}" style="width:40px;"></span>
                     <span>Lkav: <input type="number" id="cfg_light" value="${DEFAULT.light}" style="width:40px;"></span>
                     <span>Skav: <input type="number" id="cfg_march" value="${DEFAULT.march}" style="width:40px;"></span>
                     <span>Späher: <input type="number" id="cfg_spy" value="${DEFAULT.spy}" style="width:40px;"></span>
@@ -225,6 +227,7 @@ javascript:(function () {
 
         const attackUrl = `/game.php?village=${game_data.village.id}&screen=place`
             + `&target=${targetId}`
+            + `&spear=${$("#cfg_spear").val() || 0}`
             + `&light=${$("#cfg_light").val() || 0}`
             + `&march=${$("#cfg_march").val() || 0}`
             + `&spy=${$("#cfg_spy").val() || 0}`;
