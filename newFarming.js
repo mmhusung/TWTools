@@ -7,8 +7,6 @@
         radius: 20
     };
 
-    const PACE_MS = 1000;
-
     if ($("#bb_master_ui").length) $("#bb_master_ui").remove();
 
     const ui = `
@@ -44,7 +42,7 @@
 
             <div id="bb_status" style="margin-bottom:5px; font-size:11px; font-weight:bold;">Lese Kartendaten ein...</div>
 
-            <button id="bb_start_farm_btn" class="btn" onclick="startFarming()" style="margin-bottom:6px; font-weight:bold; width:100%; padding:4px;">▶ Alle farmen (danach Enter gedrückt halten)</button>
+            <button id="bb_start_farm_btn" class="btn" onclick="startFarming()" style="margin-bottom:6px; font-weight:bold; width:100%; padding:4px;">▶ Start (danach: Enter = Versammlungsplatz / Enter = Angreifen)</button>
 
             <div id="bb_list_container" style="max-height:220px; overflow-y:auto; border:1px solid #7d510f; background:#fff5da;">
                 <table class="vis" width="100%">
@@ -98,7 +96,6 @@
     let currentFarmTarget = null;
     let totalToFarm = 0;
     let farmingStarted = false;
-    let nextActionAt = 0;
 
     function updateAttackProgress() {
         const pct = totalToFarm > 0 ? Math.round((openedIds.size / totalToFarm) * 100) : 0;
@@ -115,7 +112,6 @@
         if (isTypingOnMainPage) return;
 
         e.preventDefault();
-        if (Date.now() < nextActionAt) return;
 
         const frame = document.getElementById("bb_farm_frame");
         if (!frame || $("#bb_frame_container").is(":hidden")) {
@@ -124,8 +120,14 @@
         }
 
         if (frame._bb_stage === "attack") {
-            frame._bb_stage = "confirm";
+            frame._bb_stage = "confirming";
             frame.src = `/game.php?village=${game_data.village.id}&screen=place&try=confirm`;
+            return;
+        }
+
+        if (frame._bb_stage === "readyNext") {
+            loadNextTarget();
+            return;
         }
     });
 
@@ -221,7 +223,8 @@
     window.farmInline = function (targetId, coords) {
         currentFarmTarget = targetId;
         const frame = document.getElementById("bb_farm_frame");
-        $("#bb_frame_title").text(`Angriff auf ${coords} (Enter drücken/halten)`);
+        $("#bb_frame_title").text(`Lade ${coords}...`);
+        $("#bb_status").text(`Öffne Versammlungsplatz für ${coords}...`);
         $("#bb_frame_container").show();
 
         const attackUrl = `/game.php?village=${game_data.village.id}&screen=place`
@@ -231,28 +234,31 @@
             + `&march=${$("#cfg_march").val() || 0}`
             + `&spy=${$("#cfg_spy").val() || 0}`;
 
-        frame._bb_stage = "attack";
+        frame._bb_stage = "loading";
         frame.src = attackUrl;
 
         frame.onload = function () {
             try {
                 const doc = frame.contentDocument || frame.contentWindow.document;
 
-                if (frame._bb_stage === "attack") {
+                if (frame._bb_stage === "loading") {
                     const hasRealError = $(doc).find(".error_box:visible").filter(function () {
                         return $(this).text().trim().length > 0;
                     }).length > 0;
 
-                    if (hasRealError) frame._bb_stage = "error";
-
-                    nextActionAt = Date.now() + PACE_MS;
+                    frame._bb_stage = hasRealError ? "error" : "attack";
+                    $("#bb_frame_title").text(`${coords}: Enter = Angreifen`);
+                    $("#bb_status").text(hasRealError
+                        ? `Fehler bei ${coords} - siehe Versammlungsplatz unten.`
+                        : `${coords} bereit - Enter drücken zum Angreifen.`);
                     return;
                 }
 
-                if (frame._bb_stage === "confirm" && currentFarmTarget) {
+                if (frame._bb_stage === "confirming" && currentFarmTarget) {
                     markDone(currentFarmTarget);
-                    nextActionAt = Date.now() + PACE_MS;
-                    farmNext();
+                    frame._bb_stage = "readyNext";
+                    $("#bb_frame_title").text("Enter = nächstes Ziel öffnen");
+                    $("#bb_status").text(`${coords} angegriffen - Enter für nächstes Ziel.`);
                 }
             } catch (e) {}
         };
@@ -266,7 +272,7 @@
         updateAttackProgress();
     };
 
-    function farmNext() {
+    function loadNextTarget() {
         const nextRow = $(".farm-row").filter(function () {
             const vId = $(this).data("village-id").toString();
             return !openedIds.has(vId);
@@ -274,23 +280,14 @@
 
         if (!nextRow.length) {
             $("#bb_frame_title").text("Alle BBs abgearbeitet!");
+            $("#bb_status").text("Alle BBs abgearbeitet!");
             updateAttackProgress();
             return;
         }
 
         const nextId = nextRow.data("village-id");
         const nextCoords = nextRow.find("td:eq(0)").text();
-
-        const tryLoad = () => {
-            const wait = nextActionAt - Date.now();
-            if (wait > 0) {
-                $("#bb_status").text(`Warte ${(wait / 1000).toFixed(1)}s...`);
-                setTimeout(tryLoad, Math.min(wait, 150));
-                return;
-            }
-            farmInline(nextId, nextCoords);
-        };
-        tryLoad();
+        farmInline(nextId, nextCoords);
     }
 
     $(document).on('change', '#cfg_radius', renderList);
