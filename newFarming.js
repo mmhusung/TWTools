@@ -1,9 +1,9 @@
 (function () {
     const DEFAULT = {
         spear: 0,
-        light: 0,
+        light: 5,
         march: 0,
-        spy: 1,
+        spy: 2,
         radius: 20
     };
 
@@ -97,7 +97,7 @@
     let totalToFarm = 0;
     let farmingStarted = false;
     let enterLocked = false;
-    let loadToken = 0;
+    let opToken = 0;
     const SETTLE_DELAY_MS = 700;
 
     function updateAttackProgress() {
@@ -126,10 +126,14 @@
         if (frame._bb_stage === "attack") {
             enterLocked = true;
             frame._bb_stage = "confirm";
+            opToken++;
+            const myOp = opToken;
             frame.src = `/game.php?village=${game_data.village.id}&screen=place&try=confirm`;
-        }
 
-        if (enterLocked) setTimeout(() => { enterLocked = false; }, 4000);
+            setTimeout(() => {
+                if (myOp === opToken) enterLocked = false;
+            }, 4000);
+        }
     });
 
     setLoadProgress(25, "Lade /map/village.txt...");
@@ -235,15 +239,15 @@
             + `&spy=${$("#cfg_spy").val() || 0}`;
 
         frame._bb_stage = "loading";
-        loadToken++;
-        const myToken = loadToken;
+        opToken++;
+        const myOp = opToken;
         frame.src = attackUrl;
 
         frame.onload = function () {
             try {
                 if (frame._bb_stage === "loading") {
                     setTimeout(() => {
-                        if (myToken !== loadToken) return;
+                        if (myOp !== opToken) return;
                         try {
                             const doc2 = frame.contentDocument || frame.contentWindow.document;
                             const hasRealError = $(doc2).find(".error_box:visible").filter(function () {
