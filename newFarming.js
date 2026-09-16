@@ -251,7 +251,6 @@
                     $("#bb_status").text(hasRealError
                         ? `Fehler bei ${coords} - siehe Versammlungsplatz unten.`
                         : `${coords} bereit - Enter drücken zum Angreifen.`);
-                    reclaimFocus();
                     return;
                 }
 
@@ -262,9 +261,7 @@
                     $("#bb_status").text(`${coords} angegriffen - Enter für nächstes Ziel.`);
                     reclaimFocus();
                 }
-            } catch (e) {
-                reclaimFocus();
-            }
+            } catch (e) {}
         };
     };
 
