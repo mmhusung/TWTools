@@ -100,14 +100,6 @@
     let farmingStarted = false;
     let nextActionAt = 0;
 
-    function paced(fn) {
-        const now = Date.now();
-        if (now < nextActionAt) return false;
-        nextActionAt = now + PACE_MS;
-        fn();
-        return true;
-    }
-
     function updateAttackProgress() {
         const pct = totalToFarm > 0 ? Math.round((openedIds.size / totalToFarm) * 100) : 0;
         const open = Math.max(totalToFarm - openedIds.size, 0);
@@ -123,18 +115,17 @@
         if (isTypingOnMainPage) return;
 
         e.preventDefault();
+        if (Date.now() < nextActionAt) return;
 
         const frame = document.getElementById("bb_farm_frame");
         if (!frame || $("#bb_frame_container").is(":hidden")) {
-            paced(() => startFarming());
+            startFarming();
             return;
         }
 
         if (frame._bb_stage === "attack") {
-            paced(() => {
-                frame._bb_stage = "confirm";
-                frame.src = `/game.php?village=${game_data.village.id}&screen=place&try=confirm`;
-            });
+            frame._bb_stage = "confirm";
+            frame.src = `/game.php?village=${game_data.village.id}&screen=place&try=confirm`;
         }
     });
 
@@ -253,11 +244,14 @@
                     }).length > 0;
 
                     if (hasRealError) frame._bb_stage = "error";
+
+                    nextActionAt = Date.now() + PACE_MS;
                     return;
                 }
 
                 if (frame._bb_stage === "confirm" && currentFarmTarget) {
                     markDone(currentFarmTarget);
+                    nextActionAt = Date.now() + PACE_MS;
                     farmNext();
                 }
             } catch (e) {}
@@ -290,11 +284,11 @@
         const tryLoad = () => {
             const wait = nextActionAt - Date.now();
             if (wait > 0) {
-                $("#bb_status").text(`Warte ${(wait / 1000).toFixed(1)}s (Takt-Limit)...`);
+                $("#bb_status").text(`Warte ${(wait / 1000).toFixed(1)}s...`);
                 setTimeout(tryLoad, Math.min(wait, 150));
                 return;
             }
-            paced(() => farmInline(nextId, nextCoords));
+            farmInline(nextId, nextCoords);
         };
         tryLoad();
     }
