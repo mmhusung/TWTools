@@ -251,6 +251,7 @@
                     $("#bb_status").text(hasRealError
                         ? `Fehler bei ${coords} - siehe Versammlungsplatz unten.`
                         : `${coords} bereit - Enter drücken zum Angreifen.`);
+                    reclaimFocus();
                     return;
                 }
 
@@ -259,10 +260,20 @@
                     frame._bb_stage = "readyNext";
                     $("#bb_frame_title").text("Enter = nächstes Ziel öffnen");
                     $("#bb_status").text(`${coords} angegriffen - Enter für nächstes Ziel.`);
+                    reclaimFocus();
                 }
-            } catch (e) {}
+            } catch (e) {
+                reclaimFocus();
+            }
         };
     };
+
+    function reclaimFocus() {
+        setTimeout(() => {
+            window.focus();
+            document.body.focus();
+        }, 50);
+    }
 
     window.markDone = function (id) {
         openedIds.add(id.toString());
