@@ -1,7 +1,7 @@
 (function () {
     const DEFAULT = {
         spear: 0,
-        light: 5,
+        light: 0,
         march: 0,
         spy: 1,
         radius: 20
@@ -239,13 +239,13 @@
             try {
                 const doc = frame.contentDocument || frame.contentWindow.document;
 
-                if (doc.querySelector(".error_box")) {
-                    frame._bb_stage = "error";
-                    enterLocked = false;
-                    return;
-                }
-
                 if (frame._bb_stage === "attack") {
+                    const hasRealError = $(doc).find(".error_box:visible").filter(function () {
+                        return $(this).text().trim().length > 0;
+                    }).length > 0;
+
+                    if (hasRealError) frame._bb_stage = "error";
+
                     enterLocked = false;
                     return;
                 }
